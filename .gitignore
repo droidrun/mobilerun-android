@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+# runtime credentials for the spike: never commit
+spike-config*.json
+**/spike-config*.json
+*.token
+.env
+.env.*
