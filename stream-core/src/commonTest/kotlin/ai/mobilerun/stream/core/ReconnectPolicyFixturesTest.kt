@@ -3,6 +3,9 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.conformance.fixtureObject
+import ai.mobilerun.stream.conformance.runFixtureCases
+import ai.mobilerun.stream.protocol.SignallingTiming
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -21,8 +24,8 @@ class ReconnectPolicyFixturesTest {
     fun constantsMatchThePolicyFile() {
         fun long(name: String) = policy.getValue(name).jsonPrimitive.long
         assertEquals(policy.getValue("max_attempts").jsonPrimitive.int, ReconnectPolicy.MAX_ATTEMPTS)
-        assertEquals(long("ws_open_timeout_ms"), ReconnectPolicy.WS_OPEN_TIMEOUT_MS)
-        assertEquals(long("rtc_config_timeout_ms"), ReconnectPolicy.RTC_CONFIG_TIMEOUT_MS)
+        assertEquals(long("ws_open_timeout_ms"), SignallingTiming.WS_OPEN_TIMEOUT_MS)
+        assertEquals(long("rtc_config_timeout_ms"), SignallingTiming.RTC_CONFIG_TIMEOUT_MS)
         assertEquals(long("connect_timeout_ms"), ReconnectPolicy.CONNECT_TIMEOUT_MS)
         assertEquals(long("stability_ms"), ReconnectPolicy.STABILITY_MS)
         val backoff = policy.getValue("backoff").jsonObject
@@ -48,8 +51,7 @@ class ReconnectPolicyFixturesTest {
     fun invariantsHold() {
         val invariants = policy.getValue("invariants").jsonArray.map { it.jsonPrimitive.content }
         assertEquals(listOf("connect_timeout_ms > ws_open_timeout_ms + rtc_config_timeout_ms"), invariants)
-        assertTrue(
-            ReconnectPolicy.CONNECT_TIMEOUT_MS > ReconnectPolicy.WS_OPEN_TIMEOUT_MS + ReconnectPolicy.RTC_CONFIG_TIMEOUT_MS,
-        )
+        val phases = SignallingTiming.WS_OPEN_TIMEOUT_MS + SignallingTiming.RTC_CONFIG_TIMEOUT_MS
+        assertTrue(ReconnectPolicy.CONNECT_TIMEOUT_MS > phases)
     }
 }

@@ -53,10 +53,7 @@ public object ControlMessages {
         out.u8(ControlMsgType.INJECT_TOUCH_EVENT)
         out.u8(action)
         out.i64Be(pointerId)
-        out.i32Le(jsToInt32(jsRound(x)))
-        out.i32Le(jsToInt32(jsRound(y)))
-        out.i16Le(videoWidth)
-        out.i16Le(videoHeight)
+        out.position(x, y, videoWidth, videoHeight)
         out.i16Le(jsToInt16(jsRound(pressure * 0xffff)))
         out.i32Le(actionButton)
         out.i32Le(buttons)
@@ -89,10 +86,7 @@ public object ControlMessages {
     ): ByteArray {
         val out = ByteWriter(SCROLL_SIZE)
         out.u8(ControlMsgType.INJECT_SCROLL_EVENT)
-        out.i32Le(jsToInt32(jsRound(x)))
-        out.i32Le(jsToInt32(jsRound(y)))
-        out.i16Le(videoWidth)
-        out.i16Le(videoHeight)
+        out.position(x, y, videoWidth, videoHeight)
         out.i16Le(jsToInt16(scrollToFixedPoint(hscrollTicks / 16)))
         out.i16Le(jsToInt16(scrollToFixedPoint(vscrollTicks / 16)))
         out.i32Le(buttons)
@@ -117,10 +111,7 @@ public object ControlMessages {
     ): ByteArray {
         val out = ByteWriter(HOVER_SIZE)
         out.u8(ControlMsgType.INJECT_MOUSE_HOVER_EVENT)
-        out.i32Le(jsToInt32(jsRound(x)))
-        out.i32Le(jsToInt32(jsRound(y)))
-        out.i16Le(videoWidth)
-        out.i16Le(videoHeight)
+        out.position(x, y, videoWidth, videoHeight)
         out.i32Le(buttons)
         return out.bytes
     }
@@ -149,13 +140,14 @@ public object ControlMessages {
     }
 
     /**
-     * Text injection (type 1, `5 + n` bytes). The string is sent as UTF-8 without normalisation;
-     * the length prefix is the byte count, little-endian.
+     * Text injection (type 1, `5 + n` bytes). The string is sent as UTF-8 without normalisation
+     * (an unpaired surrogate becomes U+FFFD, like `TextEncoder`); the length prefix is the byte
+     * count, little-endian.
      *
      * @param text the text to type on the device.
      */
     public fun text(text: String): ByteArray {
-        val payload = text.encodeToByteArray()
+        val payload = text.encodeUtf8()
         val out = ByteWriter(TEXT_HEADER_SIZE + payload.size)
         out.u8(ControlMsgType.INJECT_TEXT)
         out.i32Le(payload.size)
@@ -167,11 +159,11 @@ public object ControlMessages {
      * Set clipboard (type 9, `14 + n` bytes). The acknowledgement sequence is always 0 and the
      * length is a big-endian byte count.
      *
-     * @param text clipboard content, sent as UTF-8.
+     * @param text clipboard content, sent as UTF-8 (an unpaired surrogate becomes U+FFFD).
      * @param paste whether the device should paste the content right after setting it.
      */
     public fun setClipboard(text: String, paste: Boolean = true): ByteArray {
-        val payload = text.encodeToByteArray()
+        val payload = text.encodeUtf8()
         val out = ByteWriter(CLIPBOARD_HEADER_SIZE + payload.size)
         out.u8(ControlMsgType.SET_CLIPBOARD)
         out.i64Be(0L)
@@ -184,11 +176,6 @@ public object ControlMessages {
     /** Mirrors `sc_float_to_i16fp`: clamp to `[-1, 1]`, scale by `0x8000`, round, cap at `0x7fff`. */
     private fun scrollToFixedPoint(value: Double): Double {
         val clamped = max(-1.0, min(1.0, value))
-        val scaled = jsRound(clamped * 0x8000)
-        return when {
-            scaled >= 0x7fff -> 0x7fff.toDouble()
-            scaled < -0x8000 -> -0x8000.toDouble()
-            else -> scaled
-        }
+        return min(jsRound(clamped * 0x8000), 0x7fff.toDouble())
     }
 }

@@ -8,8 +8,6 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-private val knownTypes = setOf("answer", "candidate", "rtcConfiguration", "screenshot", "screenshotError")
-
 internal fun parseServerFrame(text: String, phase: SignallingPhase): ServerFrame {
     val element = try {
         SignallingJson.parseToJsonElement(text)
@@ -21,15 +19,17 @@ internal fun parseServerFrame(text: String, phase: SignallingPhase): ServerFrame
     if (element is JsonNull) return invalidFrame(phase)
     if (element !is JsonObject) return ServerFrame.Ignored
 
-    val type = (element["type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
-    if (type == null || type !in knownTypes) return ServerFrame.Ignored
-    if (phase == SignallingPhase.AwaitingRtcConfiguration && type != "rtcConfiguration") return ServerFrame.Ignored
+    if (phase == SignallingPhase.AwaitingRtcConfiguration) {
+        val type = (element["type"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (type != "rtcConfiguration") return ServerFrame.Ignored
+    }
 
     return try {
         ServerFrame.Message(SignallingJson.decodeFromJsonElement(ServerMessage.serializer(), element))
-    } catch (_: SerializationException) {
-        // A message that misses a required field is dropped; an unusable initial configuration
-        // cannot create the peer connection, which fails the attempt.
+    } catch (_: IllegalArgumentException) {
+        // Covers SerializationException: an unknown or malformed `type`, or a missing required field,
+        // is dropped; an unusable initial configuration cannot create the peer connection, which
+        // fails the attempt.
         invalidFrame(phase)
     }
 }

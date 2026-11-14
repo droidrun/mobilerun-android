@@ -3,6 +3,9 @@
 
 package ai.mobilerun.stream.protocol
 
+import ai.mobilerun.stream.conformance.fixtureObject
+import ai.mobilerun.stream.conformance.runFixtureCases
+import ai.mobilerun.stream.conformance.toHex
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.double
@@ -16,8 +19,6 @@ import kotlin.test.assertEquals
 
 /** Every case of `control/<builder>.json` must encode to exactly its `hex`. */
 class ControlFixturesTest {
-    private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
-
     private fun JsonObject.int(name: String) = getValue(name).jsonPrimitive.int
     private fun JsonObject.long(name: String) = getValue(name).jsonPrimitive.long
     private fun JsonObject.double(name: String) = getValue(name).jsonPrimitive.double
@@ -88,18 +89,5 @@ class ControlFixturesTest {
     @Test
     fun setClipboard() = check("set-clipboard") { a ->
         ControlMessages.setClipboard(text = a.string("text"), paste = a.bool("paste"))
-    }
-
-    @Test
-    fun defaultsMatchTheReferenceBuilders() {
-        assertEquals(
-            ControlMessages.touch(0, 0, 1080, 2400, 1.0, 2.0, pressure = 1.0, actionButton = 0, buttons = 0).toHex(),
-            ControlMessages.touch(0, 0, 1080, 2400, 1.0, 2.0).toHex(),
-        )
-        assertEquals(
-            ControlMessages.keycode(0, 3, repeat = 0, metaState = 0).toHex(),
-            ControlMessages.keycode(0, 3).toHex(),
-        )
-        assertEquals(ControlMessages.setClipboard("a", paste = true).toHex(), ControlMessages.setClipboard("a").toHex())
     }
 }

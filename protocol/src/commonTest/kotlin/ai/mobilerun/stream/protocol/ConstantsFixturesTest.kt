@@ -3,32 +3,24 @@
 
 package ai.mobilerun.stream.protocol
 
+import ai.mobilerun.stream.conformance.fixtureObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** `constants.json` must equal the Kotlin tables entry by entry. */
+/**
+ * The keyboard code map of `constants.json` must equal the Kotlin table. The constant objects are
+ * generated from the same file and CI fails when the committed copy is stale.
+ */
 class ConstantsFixturesTest {
-    private fun expected(section: String): Map<String, Int> =
-        fixtureObject("constants.json").getValue(section).jsonObject.mapValues { it.value.jsonPrimitive.int }
-
-    private fun check(section: String, actual: Map<String, Int>) {
-        val exp = expected(section)
-        println("conformance: constants.json/$section exercised ${actual.size} of ${exp.size}")
-        assertEquals(exp, actual, "constants.json $section")
+    @Test
+    fun keyboardCodeMap() {
+        val expected = fixtureObject("constants.json").getValue("code_map").jsonObject
+            .mapValues { it.value.jsonPrimitive.int }
+        val actual = KeyboardCodes.keycodeByCode
+        println("conformance: constants.json/code_map exercised ${actual.size} of ${expected.size}")
+        assertEquals(expected, actual)
     }
-
-    @Test
-    fun controlMsgType() = check("control_msg_type", ControlMsgType.entries)
-
-    @Test
-    fun amotionEvent() = check("amotion_event", AMotionEvent.entries)
-
-    @Test
-    fun androidKeys() = check("android_keys", AndroidKeys.entries)
-
-    @Test
-    fun keyboardCodeMap() = check("code_map", KeyboardCodes.keycodeByCode)
 }

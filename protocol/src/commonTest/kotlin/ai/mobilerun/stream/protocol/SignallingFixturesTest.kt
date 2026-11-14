@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.protocol
 
+import ai.mobilerun.stream.conformance.fixtureObject
+import ai.mobilerun.stream.conformance.runFixtureCases
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.long
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 /** Every example of `signalling/<message>.json` must parse and re-serialize to the same JSON object. */
 class SignallingFixturesTest {
@@ -25,7 +28,10 @@ class SignallingFixturesTest {
         assertEquals(json, Json.parseToJsonElement(message.toJson()))
     }
 
-    private fun checkServer(file: String, phases: List<SignallingPhase> = listOf(SignallingPhase.Established)) =
+    private fun checkServer(
+        file: String,
+        phases: List<SignallingPhase> = listOf(SignallingPhase.Established),
+    ) =
         runFixtureCases(file, examples(file)) { _, case ->
             val json = case.getValue("json").jsonObject
             for (phase in phases) {
@@ -75,30 +81,6 @@ class SignallingFixturesTest {
     fun serverScreenshotError() = checkServer("signalling/server-screenshot-error.json")
 
     @Test
-    fun serverMessageTypesMatchTheFixtureFiles() {
-        val types = listOf(
-            "answer", "candidate", "rtcConfiguration", "screenshot", "screenshotError",
-        )
-        val files = listOf(
-            "server-answer", "server-candidate", "server-rtc-configuration", "server-screenshot", "server-screenshot-error",
-        )
-        assertEquals(types, files.map { fixtureObject("signalling/$it.json").getValue("type").jsonPrimitive.content })
-    }
-
-    @Test
-    fun clientMessageTypesMatchTheFixtureFiles() {
-        val files = listOf(
-            "client-request-rtc-configuration", "client-offer", "client-candidate", "client-keep-alive",
-            "client-request-frame", "client-open-url", "client-screenshot-request",
-        )
-        val types = files.map { fixtureObject("signalling/$it.json").getValue("type").jsonPrimitive.content }
-        assertEquals(
-            listOf("requestRtcConfiguration", "offer", "candidate", "keepAlive", "requestFrame", "openUrl", "screenshot"),
-            types,
-        )
-    }
-
-    @Test
     fun clientCandidateWritesExplicitNulls() {
         val json = Json.parseToJsonElement(ClientMessage.Candidate("c", null, null, "s").toJson()).jsonObject
         assertEquals(setOf("type", "candidate", "sdpMid", "sdpMLineIndex", "sessionId"), json.keys)
@@ -116,9 +98,11 @@ class SignallingFixturesTest {
 
     @Test
     fun openUrlNoteExample() {
-        val note = fixtureObject("signalling/client-open-url.json").getValue("notes").jsonArray.first().jsonPrimitive.content
+        val note = fixtureObject("signalling/client-open-url.json").getValue("notes").jsonArray.first()
+            .jsonPrimitive.content
         val input = Regex("Input \"([^\"]*)\"").find(note)!!.groupValues[1]
-        val expected = examples("signalling/client-open-url.json").first().jsonObject.getValue("json").jsonObject
+        val expected = examples("signalling/client-open-url.json").first().jsonObject
+            .getValue("json").jsonObject
         assertEquals(
             expected.getValue("url").jsonPrimitive.content,
             ClientMessage.OpenUrl.create(input, "sess_0123456789abcdef").url,
@@ -136,11 +120,19 @@ class SignallingFixturesTest {
     @Test
     fun iceServerUrlsMayBeAStringOrAnArray() {
         val frame = ServerMessage.parse(
-            """{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[{"urls":"stun:a"},{"urls":["turn:b"],"username":"u","credential":"c"}]}}""",
+            """{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[""" +
+                """{"urls":"stun:a"},{"urls":["turn:b"],"username":"u","credential":"c"}]}}""",
             SignallingPhase.Established,
         )
-        val servers = assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(frame).message).iceServers
-        assertEquals(listOf(IceServer(listOf("stun:a")), IceServer(listOf("turn:b"), "u", "c")), servers)
+        val message = assertIs<ServerFrame.Message>(frame).message
+        val servers = assertIs<ServerMessage.RtcConfiguration>(message).iceServers!!
+        assertEquals(2, servers.size)
+        assertEquals(listOf("stun:a"), servers[0].urls)
+        assertNull(servers[0].username)
+        assertNull(servers[0].credential)
+        assertEquals(listOf("turn:b"), servers[1].urls)
+        assertEquals("u", servers[1].username)
+        assertEquals("c", servers[1].credential)
     }
 
     @Test

@@ -36,7 +36,7 @@ public object SignallingTiming {
  * @property ordered whether delivery is ordered.
  * @property maxRetransmits retransmit limit, or `null` for fully reliable delivery.
  */
-public class DataChannelSpec(
+public class DataChannelSpec internal constructor(
     public val label: String,
     public val id: Int,
     public val ordered: Boolean,
@@ -46,8 +46,10 @@ public class DataChannelSpec(
 /** The two data channels every session negotiates. */
 public object DataChannels {
     /** Reliable and ordered; carries every binary control message except hover. */
-    public val control: DataChannelSpec = DataChannelSpec("control", id = 1, ordered = true, maxRetransmits = null)
+    public val control: DataChannelSpec =
+        DataChannelSpec("control", id = 1, ordered = true, maxRetransmits = null)
 
     /** Unordered, no retransmits; carries hover messages only and drops them while not open. */
-    public val hover: DataChannelSpec = DataChannelSpec("hover", id = 2, ordered = false, maxRetransmits = 0)
+    public val hover: DataChannelSpec =
+        DataChannelSpec("hover", id = 2, ordered = false, maxRetransmits = 0)
 }

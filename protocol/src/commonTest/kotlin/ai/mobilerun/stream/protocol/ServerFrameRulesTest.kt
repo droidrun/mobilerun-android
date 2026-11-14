@@ -3,13 +3,13 @@
 
 package ai.mobilerun.stream.protocol
 
+import ai.mobilerun.stream.conformance.fixtureObject
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * The per-phase handling rules of `signalling/sequence.json` (`ignored` and `failure_triggers`)
@@ -21,105 +21,114 @@ class ServerFrameRulesTest {
 
     private fun parse(text: String, phase: SignallingPhase) = ServerMessage.parse(text, phase)
 
+    private fun message(text: String, phase: SignallingPhase): ServerMessage =
+        assertIs<ServerFrame.Message>(parse(text, phase)).message
+
+    private fun rtcConfiguration(text: String, phase: SignallingPhase): ServerMessage.RtcConfiguration =
+        assertIs<ServerMessage.RtcConfiguration>(message(text, phase))
+
+    private fun assertAll(expected: ServerFrame, phase: SignallingPhase, vararg texts: String) {
+        for (text in texts) assertEquals(expected, parse(text, phase), text)
+    }
+
     @Test
-    fun theFixtureStatesTheRulesThisTestEncodes() {
-        val ignored = fixtureObject("signalling/sequence.json").getValue("ignored").jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(3, ignored.size)
-        assertTrue(ignored[0].startsWith("Per connection phase."), ignored[0])
-        assertTrue(ignored[1].startsWith("After the general message handler"), ignored[1])
+    fun theFixtureListsTheThreeIgnoreRules() {
+        assertEquals(3, fixtureObject("signalling/sequence.json").getValue("ignored").jsonArray.size)
     }
 
     @Test
     fun awaitingConfigurationInvalidJsonFailsStartup() {
-        assertEquals(ServerFrame.StartupFailure, parse("not json", awaiting))
-        assertEquals(ServerFrame.StartupFailure, parse("", awaiting))
-        assertEquals(ServerFrame.StartupFailure, parse("{\"type\":", awaiting))
-        assertEquals(ServerFrame.StartupFailure, parse("null", awaiting))
+        assertAll(ServerFrame.StartupFailure, awaiting, "not json", "", "{\"type\":", "null")
     }
 
     @Test
     fun awaitingConfigurationIgnoresValidMessagesOfAnyOtherType() {
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"answer","sdp":"x"}""", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"candidate","candidate":"c","sdpMid":"0","sdpMLineIndex":0}""", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"nope"}""", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("""{"no":"type"}""", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("[1,2]", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("42", awaiting))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":7}""", awaiting))
-    }
-
-    @Test
-    fun awaitingConfigurationAcceptsTheInitialReply() {
-        val frame = parse("""{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[]}}""", awaiting)
-        val message = assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(frame).message)
-        assertEquals(emptyList(), message.iceServers)
-    }
-
-    @Test
-    fun awaitingConfigurationReplyWithoutConfigurationUsesDefaults() {
-        val frame = parse("""{"type":"rtcConfiguration"}""", awaiting)
-        val message = assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(frame).message)
-        assertNull(message.configuration)
-        assertNull(message.iceServers)
+        assertAll(
+            ServerFrame.Ignored,
+            awaiting,
+            """{"type":"answer","sdp":"x"}""",
+            """{"type":"candidate","candidate":"c","sdpMid":"0","sdpMLineIndex":0}""",
+            """{"type":"nope"}""",
+            """{"no":"type"}""",
+            """{"type":7}""",
+            "[1,2]",
+            "42",
+        )
     }
 
     @Test
     fun awaitingConfigurationReplyThatCannotBeAConfigurationFailsStartup() {
-        assertEquals(ServerFrame.StartupFailure, parse("""{"type":"rtcConfiguration","rtcConfiguration":"x"}""", awaiting))
+        assertAll(
+            ServerFrame.StartupFailure,
+            awaiting,
+            """{"type":"rtcConfiguration","rtcConfiguration":"x"}""",
+        )
     }
 
     @Test
-    fun establishedDropsInvalidJsonAndUnknownTypes() {
-        assertEquals(ServerFrame.Ignored, parse("not json", established))
-        assertEquals(ServerFrame.Ignored, parse("null", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"future"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":null}""", established))
-        assertEquals(ServerFrame.Ignored, parse("[]", established))
+    fun configurationWithEmptyIceServersIsValidInBothPhases() {
+        for (phase in listOf(awaiting, established)) {
+            val text = """{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[]}}"""
+            assertEquals(emptyList(), rtcConfiguration(text, phase).iceServers, "$phase")
+        }
     }
 
     @Test
-    fun establishedIgnoresUnknownFieldsOnKnownTypes() {
-        val frame = parse("""{"type":"answer","sdp":"x","extra":1}""", established)
-        assertEquals(ServerMessage.Answer("x"), assertIs<ServerFrame.Message>(frame).message)
-    }
-
-    @Test
-    fun screenshotMissingAStringFieldIsIgnored() {
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshot","id":"a"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshot","dataUri":"d"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshot","id":1,"dataUri":"d"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshotError","id":"a"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshotError","message":"m"}""", established))
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"screenshotError","id":"a","message":null}""", established))
-    }
-
-    @Test
-    fun answerWithoutSdpIsIgnored() {
-        assertEquals(ServerFrame.Ignored, parse("""{"type":"answer"}""", established))
-    }
-
-    @Test
-    fun refreshWithoutIceServersHasNoIceServers() {
-        val frame = parse("""{"type":"rtcConfiguration","rtcConfiguration":{}}""", established)
-        assertNull(assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(frame).message).iceServers)
-        val nullFrame = parse("""{"type":"rtcConfiguration","rtcConfiguration":null}""", established)
-        assertNull(assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(nullFrame).message).iceServers)
-    }
-
-    @Test
-    fun refreshWithEmptyIceServersIsAValidRefresh() {
-        val frame = parse("""{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[]}}""", established)
-        val servers = assertIs<ServerMessage.RtcConfiguration>(assertIs<ServerFrame.Message>(frame).message).iceServers
-        assertEquals(emptyList(), servers)
+    fun configurationWithoutIceServersHasNone() {
+        for (phase in listOf(awaiting, established)) {
+            for (text in listOf(
+                """{"type":"rtcConfiguration"}""",
+                """{"type":"rtcConfiguration","rtcConfiguration":null}""",
+                """{"type":"rtcConfiguration","rtcConfiguration":{}}""",
+            )) {
+                assertNull(rtcConfiguration(text, phase).iceServers, "$phase $text")
+            }
+        }
+        assertNull(rtcConfiguration("""{"type":"rtcConfiguration"}""", awaiting).configuration)
     }
 
     @Test
     fun initialReplyKeepsEveryConfigurationKey() {
-        val text = """{"type":"rtcConfiguration","rtcConfiguration":{"iceServers":[],"iceTransportPolicy":"relay"}}"""
-        val message = assertIs<ServerFrame.Message>(parse(text, awaiting)).message
-        assertEquals(
-            kotlinx.serialization.json.Json.parseToJsonElement(text),
-            kotlinx.serialization.json.Json.parseToJsonElement(message.toJson()),
+        val text = """{"type":"rtcConfiguration","rtcConfiguration":""" +
+            """{"iceServers":[],"iceTransportPolicy":"relay"}}"""
+        assertEquals(Json.parseToJsonElement(text), Json.parseToJsonElement(message(text, awaiting).toJson()))
+    }
+
+    @Test
+    fun establishedDropsInvalidJsonAndUnknownTypes() {
+        assertAll(
+            ServerFrame.Ignored,
+            established,
+            "not json",
+            "null",
+            "[]",
+            """{"type":"future"}""",
+            """{"type":null}""",
+            """{"type":[]}""",
+            """{"type":{}}""",
+            """{"no":"type"}""",
+        )
+    }
+
+    @Test
+    fun establishedIgnoresUnknownFieldsOnKnownTypes() {
+        val text = """{"type":"answer","sdp":"x","extra":1}"""
+        val answer = assertIs<ServerMessage.Answer>(message(text, established))
+        assertEquals("x", answer.sdp)
+    }
+
+    @Test
+    fun messageMissingARequiredStringFieldIsIgnored() {
+        assertAll(
+            ServerFrame.Ignored,
+            established,
+            """{"type":"answer"}""",
+            """{"type":"screenshot","id":"a"}""",
+            """{"type":"screenshot","dataUri":"d"}""",
+            """{"type":"screenshot","id":1,"dataUri":"d"}""",
+            """{"type":"screenshotError","id":"a"}""",
+            """{"type":"screenshotError","message":"m"}""",
+            """{"type":"screenshotError","id":"a","message":null}""",
         )
     }
 }

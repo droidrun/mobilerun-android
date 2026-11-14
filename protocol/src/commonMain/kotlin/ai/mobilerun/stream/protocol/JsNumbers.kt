@@ -6,11 +6,9 @@ package ai.mobilerun.stream.protocol
 import kotlin.math.floor
 import kotlin.math.truncate
 
-/**
- * The few JavaScript number conversions the reference encoders rely on
- * (`Math.round`, and the implicit wrap of `DataView.setInt32`/`setInt16`).
- * Kept bit-exact so every SDK emits the same bytes for the same input.
- */
+// The few JavaScript number conversions the reference encoders rely on
+// (`Math.round`, and the implicit wrap of `DataView.setInt32`/`setInt16`).
+// Kept bit-exact so every SDK emits the same bytes for the same input.
 
 /** `Math.round`: halves round toward positive infinity (`2.5` to `3`, `-0.5` to `0`, `-1.5` to `-1`). */
 internal fun jsRound(value: Double): Double {

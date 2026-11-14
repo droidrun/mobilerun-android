@@ -12,15 +12,10 @@ public object ReconnectPolicy {
     /** Consecutive failed attempts after which the stream is declared unavailable and retries stop. */
     public const val MAX_ATTEMPTS: Int = 6
 
-    /** How long the signalling WebSocket may take to open. */
-    public const val WS_OPEN_TIMEOUT_MS: Long = 15_000
-
-    /** How long the ICE configuration reply may take after the socket opened. */
-    public const val RTC_CONFIG_TIMEOUT_MS: Long = 15_000
-
     /**
-     * Watchdog for a whole connect attempt. It must exceed [WS_OPEN_TIMEOUT_MS] + [RTC_CONFIG_TIMEOUT_MS]
-     * so it never preempts a slow-but-valid handshake the connection layer still considers on budget.
+     * Watchdog for a whole connect attempt. It must exceed the WebSocket-open and ICE-configuration
+     * timeouts combined (30 s) so it never preempts a slow-but-valid handshake the connection layer
+     * still considers on budget.
      */
     public const val CONNECT_TIMEOUT_MS: Long = 45_000
 
@@ -43,8 +38,12 @@ public object ReconnectPolicy {
      */
     public fun delayMs(attempt: Int, random: Double): Long {
         val base = min(BASE_DELAY_MS * 2.0.pow(maxOf(1, attempt) - 1), MAX_DELAY_MS.toDouble())
-        val jittered = base * (0.75 + random * 0.5)
-        val lower = floor(jittered)
-        return (if (jittered - lower >= 0.5) lower + 1.0 else lower).toLong()
+        return jsRound(base * (0.75 + random * 0.5)).toLong()
     }
+}
+
+/** `Math.round`: halves round toward positive infinity. */
+private fun jsRound(value: Double): Double {
+    val lower = floor(value)
+    return if (value - lower >= 0.5) lower + 1.0 else lower
 }

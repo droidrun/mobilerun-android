@@ -4,6 +4,7 @@
 package ai.mobilerun.stream.protocol
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 /** The JavaScript number semantics the encoders depend on. */
@@ -36,8 +37,25 @@ class JsNumbersTest {
     }
 
     @Test
-    fun nonFiniteScrollAndCoordinatesDoNotThrow() {
-        ControlMessages.scroll(1080, 2400, Double.NaN, Double.POSITIVE_INFINITY, Double.NaN, Double.NEGATIVE_INFINITY)
-        ControlMessages.touch(0, 0, 1080, 2400, Double.NaN, Double.NaN, pressure = Double.NaN)
+    fun nonFiniteScrollAndCoordinatesEncodeAsZero() {
+        val scroll = ControlMessages.scroll(
+            videoWidth = 0,
+            videoHeight = 0,
+            x = Double.NaN,
+            y = Double.POSITIVE_INFINITY,
+            hscrollTicks = Double.NaN,
+            vscrollTicks = Double.NaN,
+        )
+        assertContentEquals(byteArrayOf(ControlMsgType.INJECT_SCROLL_EVENT.toByte()) + ByteArray(20), scroll)
+        val touch = ControlMessages.touch(
+            action = 0,
+            pointerId = 0,
+            videoWidth = 0,
+            videoHeight = 0,
+            x = Double.NaN,
+            y = Double.NEGATIVE_INFINITY,
+            pressure = Double.NaN,
+        )
+        assertContentEquals(byteArrayOf(ControlMsgType.INJECT_TOUCH_EVENT.toByte()) + ByteArray(31), touch)
     }
 }

@@ -7,698 +7,238 @@ package ai.mobilerun.stream.protocol
 
 /** Message type byte (first byte) of every binary control message. */
 public object ControlMsgType {
-    /** `INJECT_KEYCODE`, wire value 0. */
     public const val INJECT_KEYCODE: Int = 0
-    /** `INJECT_TEXT`, wire value 1. */
     public const val INJECT_TEXT: Int = 1
-    /** `INJECT_TOUCH_EVENT`, wire value 2. */
     public const val INJECT_TOUCH_EVENT: Int = 2
-    /** `INJECT_SCROLL_EVENT`, wire value 3. */
     public const val INJECT_SCROLL_EVENT: Int = 3
-    /** `BACK_OR_SCREEN_ON`, wire value 4. */
     public const val BACK_OR_SCREEN_ON: Int = 4
-    /** `EXPAND_NOTIFICATION_PANEL`, wire value 5. */
     public const val EXPAND_NOTIFICATION_PANEL: Int = 5
-    /** `EXPAND_SETTINGS_PANEL`, wire value 6. */
     public const val EXPAND_SETTINGS_PANEL: Int = 6
-    /** `COLLAPSE_PANELS`, wire value 7. */
     public const val COLLAPSE_PANELS: Int = 7
-    /** `GET_CLIPBOARD`, wire value 8. */
     public const val GET_CLIPBOARD: Int = 8
-    /** `SET_CLIPBOARD`, wire value 9. */
     public const val SET_CLIPBOARD: Int = 9
-    /** `SET_DISPLAY_POWER`, wire value 10. */
     public const val SET_DISPLAY_POWER: Int = 10
-    /** `ROTATE_DEVICE`, wire value 11. */
     public const val ROTATE_DEVICE: Int = 11
-    /** `INJECT_MOUSE_HOVER_EVENT`, wire value 21. */
     public const val INJECT_MOUSE_HOVER_EVENT: Int = 21
-
-    /** Every constant above by name; used to check the table against the shared fixtures. */
-    internal val entries: Map<String, Int> = mapOf(
-        "INJECT_KEYCODE" to INJECT_KEYCODE,
-        "INJECT_TEXT" to INJECT_TEXT,
-        "INJECT_TOUCH_EVENT" to INJECT_TOUCH_EVENT,
-        "INJECT_SCROLL_EVENT" to INJECT_SCROLL_EVENT,
-        "BACK_OR_SCREEN_ON" to BACK_OR_SCREEN_ON,
-        "EXPAND_NOTIFICATION_PANEL" to EXPAND_NOTIFICATION_PANEL,
-        "EXPAND_SETTINGS_PANEL" to EXPAND_SETTINGS_PANEL,
-        "COLLAPSE_PANELS" to COLLAPSE_PANELS,
-        "GET_CLIPBOARD" to GET_CLIPBOARD,
-        "SET_CLIPBOARD" to SET_CLIPBOARD,
-        "SET_DISPLAY_POWER" to SET_DISPLAY_POWER,
-        "ROTATE_DEVICE" to ROTATE_DEVICE,
-        "INJECT_MOUSE_HOVER_EVENT" to INJECT_MOUSE_HOVER_EVENT,
-    )
 }
 
 /** Motion event actions and mouse button flags used by touch, scroll and hover messages. */
 public object AMotionEvent {
-    /** `ACTION_DOWN`, wire value 0. */
     public const val ACTION_DOWN: Int = 0
-    /** `ACTION_UP`, wire value 1. */
     public const val ACTION_UP: Int = 1
-    /** `ACTION_MOVE`, wire value 2. */
     public const val ACTION_MOVE: Int = 2
-    /** `ACTION_CANCEL`, wire value 3. */
     public const val ACTION_CANCEL: Int = 3
-    /** `ACTION_POINTER_DOWN`, wire value 5. */
     public const val ACTION_POINTER_DOWN: Int = 5
-    /** `ACTION_POINTER_UP`, wire value 6. */
     public const val ACTION_POINTER_UP: Int = 6
-    /** `BUTTON_PRIMARY`, wire value 1. */
     public const val BUTTON_PRIMARY: Int = 1
-    /** `BUTTON_SECONDARY`, wire value 2. */
     public const val BUTTON_SECONDARY: Int = 2
-    /** `BUTTON_TERTIARY`, wire value 4. */
     public const val BUTTON_TERTIARY: Int = 4
-
-    /** Every constant above by name; used to check the table against the shared fixtures. */
-    internal val entries: Map<String, Int> = mapOf(
-        "ACTION_DOWN" to ACTION_DOWN,
-        "ACTION_UP" to ACTION_UP,
-        "ACTION_MOVE" to ACTION_MOVE,
-        "ACTION_CANCEL" to ACTION_CANCEL,
-        "ACTION_POINTER_DOWN" to ACTION_POINTER_DOWN,
-        "ACTION_POINTER_UP" to ACTION_POINTER_UP,
-        "BUTTON_PRIMARY" to BUTTON_PRIMARY,
-        "BUTTON_SECONDARY" to BUTTON_SECONDARY,
-        "BUTTON_TERTIARY" to BUTTON_TERTIARY,
-    )
 }
 
 /** Key actions, meta state flags and Android key codes used by keycode messages. */
 public object AndroidKeys {
-    /** `ACTION_DOWN`, wire value 0. */
     public const val ACTION_DOWN: Int = 0
-    /** `ACTION_UP`, wire value 1. */
     public const val ACTION_UP: Int = 1
-    /** `META_NONE`, wire value 0. */
     public const val META_NONE: Int = 0
-    /** `META_SHIFT_ON`, wire value 1. */
     public const val META_SHIFT_ON: Int = 1
-    /** `META_ALT_ON`, wire value 2. */
     public const val META_ALT_ON: Int = 2
-    /** `META_CTRL_ON`, wire value 4096. */
     public const val META_CTRL_ON: Int = 4096
-    /** `META_META_ON`, wire value 65536. */
     public const val META_META_ON: Int = 65536
-    /** `KEYCODE_UNKNOWN`, wire value 0. */
     public const val KEYCODE_UNKNOWN: Int = 0
-    /** `KEYCODE_SOFT_LEFT`, wire value 1. */
     public const val KEYCODE_SOFT_LEFT: Int = 1
-    /** `KEYCODE_SOFT_RIGHT`, wire value 2. */
     public const val KEYCODE_SOFT_RIGHT: Int = 2
-    /** `KEYCODE_HOME`, wire value 3. */
     public const val KEYCODE_HOME: Int = 3
-    /** `KEYCODE_BACK`, wire value 4. */
     public const val KEYCODE_BACK: Int = 4
-    /** `KEYCODE_CALL`, wire value 5. */
     public const val KEYCODE_CALL: Int = 5
-    /** `KEYCODE_ENDCALL`, wire value 6. */
     public const val KEYCODE_ENDCALL: Int = 6
-    /** `KEYCODE_0`, wire value 7. */
     public const val KEYCODE_0: Int = 7
-    /** `KEYCODE_1`, wire value 8. */
     public const val KEYCODE_1: Int = 8
-    /** `KEYCODE_2`, wire value 9. */
     public const val KEYCODE_2: Int = 9
-    /** `KEYCODE_3`, wire value 10. */
     public const val KEYCODE_3: Int = 10
-    /** `KEYCODE_4`, wire value 11. */
     public const val KEYCODE_4: Int = 11
-    /** `KEYCODE_5`, wire value 12. */
     public const val KEYCODE_5: Int = 12
-    /** `KEYCODE_6`, wire value 13. */
     public const val KEYCODE_6: Int = 13
-    /** `KEYCODE_7`, wire value 14. */
     public const val KEYCODE_7: Int = 14
-    /** `KEYCODE_8`, wire value 15. */
     public const val KEYCODE_8: Int = 15
-    /** `KEYCODE_9`, wire value 16. */
     public const val KEYCODE_9: Int = 16
-    /** `KEYCODE_STAR`, wire value 17. */
     public const val KEYCODE_STAR: Int = 17
-    /** `KEYCODE_POUND`, wire value 18. */
     public const val KEYCODE_POUND: Int = 18
-    /** `DPAD_UP`, wire value 19. */
     public const val DPAD_UP: Int = 19
-    /** `DPAD_DOWN`, wire value 20. */
     public const val DPAD_DOWN: Int = 20
-    /** `DPAD_LEFT`, wire value 21. */
     public const val DPAD_LEFT: Int = 21
-    /** `DPAD_RIGHT`, wire value 22. */
     public const val DPAD_RIGHT: Int = 22
-    /** `KEYCODE_DPAD_CENTER`, wire value 23. */
     public const val KEYCODE_DPAD_CENTER: Int = 23
-    /** `KEYCODE_VOLUME_UP`, wire value 24. */
     public const val KEYCODE_VOLUME_UP: Int = 24
-    /** `KEYCODE_VOLUME_DOWN`, wire value 25. */
     public const val KEYCODE_VOLUME_DOWN: Int = 25
-    /** `KEYCODE_POWER`, wire value 26. */
     public const val KEYCODE_POWER: Int = 26
-    /** `KEYCODE_CAMERA`, wire value 27. */
     public const val KEYCODE_CAMERA: Int = 27
-    /** `KEYCODE_CLEAR`, wire value 28. */
     public const val KEYCODE_CLEAR: Int = 28
-    /** `KEYCODE_A`, wire value 29. */
     public const val KEYCODE_A: Int = 29
-    /** `KEYCODE_B`, wire value 30. */
     public const val KEYCODE_B: Int = 30
-    /** `KEYCODE_C`, wire value 31. */
     public const val KEYCODE_C: Int = 31
-    /** `KEYCODE_D`, wire value 32. */
     public const val KEYCODE_D: Int = 32
-    /** `KEYCODE_E`, wire value 33. */
     public const val KEYCODE_E: Int = 33
-    /** `KEYCODE_F`, wire value 34. */
     public const val KEYCODE_F: Int = 34
-    /** `KEYCODE_G`, wire value 35. */
     public const val KEYCODE_G: Int = 35
-    /** `KEYCODE_H`, wire value 36. */
     public const val KEYCODE_H: Int = 36
-    /** `KEYCODE_I`, wire value 37. */
     public const val KEYCODE_I: Int = 37
-    /** `KEYCODE_J`, wire value 38. */
     public const val KEYCODE_J: Int = 38
-    /** `KEYCODE_K`, wire value 39. */
     public const val KEYCODE_K: Int = 39
-    /** `KEYCODE_L`, wire value 40. */
     public const val KEYCODE_L: Int = 40
-    /** `KEYCODE_M`, wire value 41. */
     public const val KEYCODE_M: Int = 41
-    /** `KEYCODE_N`, wire value 42. */
     public const val KEYCODE_N: Int = 42
-    /** `KEYCODE_O`, wire value 43. */
     public const val KEYCODE_O: Int = 43
-    /** `KEYCODE_P`, wire value 44. */
     public const val KEYCODE_P: Int = 44
-    /** `KEYCODE_Q`, wire value 45. */
     public const val KEYCODE_Q: Int = 45
-    /** `KEYCODE_R`, wire value 46. */
     public const val KEYCODE_R: Int = 46
-    /** `KEYCODE_S`, wire value 47. */
     public const val KEYCODE_S: Int = 47
-    /** `KEYCODE_T`, wire value 48. */
     public const val KEYCODE_T: Int = 48
-    /** `KEYCODE_U`, wire value 49. */
     public const val KEYCODE_U: Int = 49
-    /** `KEYCODE_V`, wire value 50. */
     public const val KEYCODE_V: Int = 50
-    /** `KEYCODE_W`, wire value 51. */
     public const val KEYCODE_W: Int = 51
-    /** `KEYCODE_X`, wire value 52. */
     public const val KEYCODE_X: Int = 52
-    /** `KEYCODE_Y`, wire value 53. */
     public const val KEYCODE_Y: Int = 53
-    /** `KEYCODE_Z`, wire value 54. */
     public const val KEYCODE_Z: Int = 54
-    /** `KEYCODE_COMMA`, wire value 55. */
     public const val KEYCODE_COMMA: Int = 55
-    /** `KEYCODE_PERIOD`, wire value 56. */
     public const val KEYCODE_PERIOD: Int = 56
-    /** `KEYCODE_ALT_LEFT`, wire value 57. */
     public const val KEYCODE_ALT_LEFT: Int = 57
-    /** `KEYCODE_ALT_RIGHT`, wire value 58. */
     public const val KEYCODE_ALT_RIGHT: Int = 58
-    /** `KEYCODE_SHIFT_LEFT`, wire value 59. */
     public const val KEYCODE_SHIFT_LEFT: Int = 59
-    /** `KEYCODE_SHIFT_RIGHT`, wire value 60. */
     public const val KEYCODE_SHIFT_RIGHT: Int = 60
-    /** `KEYCODE_TAB`, wire value 61. */
     public const val KEYCODE_TAB: Int = 61
-    /** `KEYCODE_SPACE`, wire value 62. */
     public const val KEYCODE_SPACE: Int = 62
-    /** `KEYCODE_SYM`, wire value 63. */
     public const val KEYCODE_SYM: Int = 63
-    /** `KEYCODE_EXPLORER`, wire value 64. */
     public const val KEYCODE_EXPLORER: Int = 64
-    /** `KEYCODE_ENVELOPE`, wire value 65. */
     public const val KEYCODE_ENVELOPE: Int = 65
-    /** `ENTER`, wire value 66. */
     public const val ENTER: Int = 66
-    /** `DEL`, wire value 67. */
     public const val DEL: Int = 67
-    /** `KEYCODE_GRAVE`, wire value 68. */
     public const val KEYCODE_GRAVE: Int = 68
-    /** `KEYCODE_MINUS`, wire value 69. */
     public const val KEYCODE_MINUS: Int = 69
-    /** `KEYCODE_EQUALS`, wire value 70. */
     public const val KEYCODE_EQUALS: Int = 70
-    /** `KEYCODE_LEFT_BRACKET`, wire value 71. */
     public const val KEYCODE_LEFT_BRACKET: Int = 71
-    /** `KEYCODE_RIGHT_BRACKET`, wire value 72. */
     public const val KEYCODE_RIGHT_BRACKET: Int = 72
-    /** `KEYCODE_BACKSLASH`, wire value 73. */
     public const val KEYCODE_BACKSLASH: Int = 73
-    /** `KEYCODE_SEMICOLON`, wire value 74. */
     public const val KEYCODE_SEMICOLON: Int = 74
-    /** `KEYCODE_APOSTROPHE`, wire value 75. */
     public const val KEYCODE_APOSTROPHE: Int = 75
-    /** `KEYCODE_SLASH`, wire value 76. */
     public const val KEYCODE_SLASH: Int = 76
-    /** `KEYCODE_AT`, wire value 77. */
     public const val KEYCODE_AT: Int = 77
-    /** `KEYCODE_NUM`, wire value 78. */
     public const val KEYCODE_NUM: Int = 78
-    /** `KEYCODE_HEADSETHOOK`, wire value 79. */
     public const val KEYCODE_HEADSETHOOK: Int = 79
-    /** `KEYCODE_FOCUS`, wire value 80. */
     public const val KEYCODE_FOCUS: Int = 80
-    /** `KEYCODE_PLUS`, wire value 81. */
     public const val KEYCODE_PLUS: Int = 81
-    /** `MENU`, wire value 82. */
     public const val MENU: Int = 82
-    /** `KEYCODE_NOTIFICATION`, wire value 83. */
     public const val KEYCODE_NOTIFICATION: Int = 83
-    /** `KEYCODE_SEARCH`, wire value 84. */
     public const val KEYCODE_SEARCH: Int = 84
-    /** `KEYCODE_MEDIA_PLAY_PAUSE`, wire value 85. */
     public const val KEYCODE_MEDIA_PLAY_PAUSE: Int = 85
-    /** `KEYCODE_MEDIA_STOP`, wire value 86. */
     public const val KEYCODE_MEDIA_STOP: Int = 86
-    /** `KEYCODE_MEDIA_NEXT`, wire value 87. */
     public const val KEYCODE_MEDIA_NEXT: Int = 87
-    /** `KEYCODE_MEDIA_PREVIOUS`, wire value 88. */
     public const val KEYCODE_MEDIA_PREVIOUS: Int = 88
-    /** `KEYCODE_MEDIA_REWIND`, wire value 89. */
     public const val KEYCODE_MEDIA_REWIND: Int = 89
-    /** `KEYCODE_MEDIA_FAST_FORWARD`, wire value 90. */
     public const val KEYCODE_MEDIA_FAST_FORWARD: Int = 90
-    /** `KEYCODE_MUTE`, wire value 91. */
     public const val KEYCODE_MUTE: Int = 91
-    /** `KEYCODE_PAGE_UP`, wire value 92. */
     public const val KEYCODE_PAGE_UP: Int = 92
-    /** `KEYCODE_PAGE_DOWN`, wire value 93. */
     public const val KEYCODE_PAGE_DOWN: Int = 93
-    /** `KEYCODE_PICTSYMBOLS`, wire value 94. */
     public const val KEYCODE_PICTSYMBOLS: Int = 94
-    /** `KEYCODE_SWITCH_CHARSET`, wire value 95. */
     public const val KEYCODE_SWITCH_CHARSET: Int = 95
-    /** `KEYCODE_BUTTON_A`, wire value 96. */
     public const val KEYCODE_BUTTON_A: Int = 96
-    /** `KEYCODE_BUTTON_B`, wire value 97. */
     public const val KEYCODE_BUTTON_B: Int = 97
-    /** `KEYCODE_BUTTON_C`, wire value 98. */
     public const val KEYCODE_BUTTON_C: Int = 98
-    /** `KEYCODE_BUTTON_X`, wire value 99. */
     public const val KEYCODE_BUTTON_X: Int = 99
-    /** `KEYCODE_BUTTON_Y`, wire value 100. */
     public const val KEYCODE_BUTTON_Y: Int = 100
-    /** `KEYCODE_BUTTON_Z`, wire value 101. */
     public const val KEYCODE_BUTTON_Z: Int = 101
-    /** `KEYCODE_BUTTON_L1`, wire value 102. */
     public const val KEYCODE_BUTTON_L1: Int = 102
-    /** `KEYCODE_BUTTON_R1`, wire value 103. */
     public const val KEYCODE_BUTTON_R1: Int = 103
-    /** `KEYCODE_BUTTON_L2`, wire value 104. */
     public const val KEYCODE_BUTTON_L2: Int = 104
-    /** `KEYCODE_BUTTON_R2`, wire value 105. */
     public const val KEYCODE_BUTTON_R2: Int = 105
-    /** `KEYCODE_BUTTON_THUMBL`, wire value 106. */
     public const val KEYCODE_BUTTON_THUMBL: Int = 106
-    /** `KEYCODE_BUTTON_THUMBR`, wire value 107. */
     public const val KEYCODE_BUTTON_THUMBR: Int = 107
-    /** `KEYCODE_BUTTON_START`, wire value 108. */
     public const val KEYCODE_BUTTON_START: Int = 108
-    /** `KEYCODE_BUTTON_SELECT`, wire value 109. */
     public const val KEYCODE_BUTTON_SELECT: Int = 109
-    /** `KEYCODE_BUTTON_MODE`, wire value 110. */
     public const val KEYCODE_BUTTON_MODE: Int = 110
-    /** `KEYCODE_ESCAPE`, wire value 111. */
     public const val KEYCODE_ESCAPE: Int = 111
-    /** `FORWARD_DEL`, wire value 112. */
     public const val FORWARD_DEL: Int = 112
-    /** `KEYCODE_CTRL_LEFT`, wire value 113. */
     public const val KEYCODE_CTRL_LEFT: Int = 113
-    /** `KEYCODE_CTRL_RIGHT`, wire value 114. */
     public const val KEYCODE_CTRL_RIGHT: Int = 114
-    /** `KEYCODE_CAPS_LOCK`, wire value 115. */
     public const val KEYCODE_CAPS_LOCK: Int = 115
-    /** `KEYCODE_SCROLL_LOCK`, wire value 116. */
     public const val KEYCODE_SCROLL_LOCK: Int = 116
-    /** `KEYCODE_META_LEFT`, wire value 117. */
     public const val KEYCODE_META_LEFT: Int = 117
-    /** `KEYCODE_META_RIGHT`, wire value 118. */
     public const val KEYCODE_META_RIGHT: Int = 118
-    /** `KEYCODE_FUNCTION`, wire value 119. */
     public const val KEYCODE_FUNCTION: Int = 119
-    /** `KEYCODE_SYSRQ`, wire value 120. */
     public const val KEYCODE_SYSRQ: Int = 120
-    /** `KEYCODE_BREAK`, wire value 121. */
     public const val KEYCODE_BREAK: Int = 121
-    /** `KEYCODE_MOVE_HOME`, wire value 122. */
     public const val KEYCODE_MOVE_HOME: Int = 122
-    /** `KEYCODE_MOVE_END`, wire value 123. */
     public const val KEYCODE_MOVE_END: Int = 123
-    /** `KEYCODE_INSERT`, wire value 124. */
     public const val KEYCODE_INSERT: Int = 124
-    /** `KEYCODE_FORWARD`, wire value 125. */
     public const val KEYCODE_FORWARD: Int = 125
-    /** `KEYCODE_MEDIA_PLAY`, wire value 126. */
     public const val KEYCODE_MEDIA_PLAY: Int = 126
-    /** `KEYCODE_MEDIA_PAUSE`, wire value 127. */
     public const val KEYCODE_MEDIA_PAUSE: Int = 127
-    /** `KEYCODE_MEDIA_CLOSE`, wire value 128. */
     public const val KEYCODE_MEDIA_CLOSE: Int = 128
-    /** `KEYCODE_MEDIA_EJECT`, wire value 129. */
     public const val KEYCODE_MEDIA_EJECT: Int = 129
-    /** `KEYCODE_MEDIA_RECORD`, wire value 130. */
     public const val KEYCODE_MEDIA_RECORD: Int = 130
-    /** `KEYCODE_F1`, wire value 131. */
     public const val KEYCODE_F1: Int = 131
-    /** `KEYCODE_F2`, wire value 132. */
     public const val KEYCODE_F2: Int = 132
-    /** `KEYCODE_F3`, wire value 133. */
     public const val KEYCODE_F3: Int = 133
-    /** `KEYCODE_F4`, wire value 134. */
     public const val KEYCODE_F4: Int = 134
-    /** `KEYCODE_F5`, wire value 135. */
     public const val KEYCODE_F5: Int = 135
-    /** `KEYCODE_F6`, wire value 136. */
     public const val KEYCODE_F6: Int = 136
-    /** `KEYCODE_F7`, wire value 137. */
     public const val KEYCODE_F7: Int = 137
-    /** `KEYCODE_F8`, wire value 138. */
     public const val KEYCODE_F8: Int = 138
-    /** `KEYCODE_F9`, wire value 139. */
     public const val KEYCODE_F9: Int = 139
-    /** `KEYCODE_F10`, wire value 140. */
     public const val KEYCODE_F10: Int = 140
-    /** `KEYCODE_F11`, wire value 141. */
     public const val KEYCODE_F11: Int = 141
-    /** `KEYCODE_F12`, wire value 142. */
     public const val KEYCODE_F12: Int = 142
-    /** `KEYCODE_NUM_LOCK`, wire value 143. */
     public const val KEYCODE_NUM_LOCK: Int = 143
-    /** `KEYCODE_NUMPAD_0`, wire value 144. */
     public const val KEYCODE_NUMPAD_0: Int = 144
-    /** `KEYCODE_NUMPAD_1`, wire value 145. */
     public const val KEYCODE_NUMPAD_1: Int = 145
-    /** `KEYCODE_NUMPAD_2`, wire value 146. */
     public const val KEYCODE_NUMPAD_2: Int = 146
-    /** `KEYCODE_NUMPAD_3`, wire value 147. */
     public const val KEYCODE_NUMPAD_3: Int = 147
-    /** `KEYCODE_NUMPAD_4`, wire value 148. */
     public const val KEYCODE_NUMPAD_4: Int = 148
-    /** `KEYCODE_NUMPAD_5`, wire value 149. */
     public const val KEYCODE_NUMPAD_5: Int = 149
-    /** `KEYCODE_NUMPAD_6`, wire value 150. */
     public const val KEYCODE_NUMPAD_6: Int = 150
-    /** `KEYCODE_NUMPAD_7`, wire value 151. */
     public const val KEYCODE_NUMPAD_7: Int = 151
-    /** `KEYCODE_NUMPAD_8`, wire value 152. */
     public const val KEYCODE_NUMPAD_8: Int = 152
-    /** `KEYCODE_NUMPAD_9`, wire value 153. */
     public const val KEYCODE_NUMPAD_9: Int = 153
-    /** `KEYCODE_NUMPAD_DIVIDE`, wire value 154. */
     public const val KEYCODE_NUMPAD_DIVIDE: Int = 154
-    /** `KEYCODE_NUMPAD_MULTIPLY`, wire value 155. */
     public const val KEYCODE_NUMPAD_MULTIPLY: Int = 155
-    /** `KEYCODE_NUMPAD_SUBTRACT`, wire value 156. */
     public const val KEYCODE_NUMPAD_SUBTRACT: Int = 156
-    /** `KEYCODE_NUMPAD_ADD`, wire value 157. */
     public const val KEYCODE_NUMPAD_ADD: Int = 157
-    /** `KEYCODE_NUMPAD_DOT`, wire value 158. */
     public const val KEYCODE_NUMPAD_DOT: Int = 158
-    /** `KEYCODE_NUMPAD_COMMA`, wire value 159. */
     public const val KEYCODE_NUMPAD_COMMA: Int = 159
-    /** `KEYCODE_NUMPAD_ENTER`, wire value 160. */
     public const val KEYCODE_NUMPAD_ENTER: Int = 160
-    /** `KEYCODE_NUMPAD_EQUALS`, wire value 161. */
     public const val KEYCODE_NUMPAD_EQUALS: Int = 161
-    /** `KEYCODE_NUMPAD_LEFT_PAREN`, wire value 162. */
     public const val KEYCODE_NUMPAD_LEFT_PAREN: Int = 162
-    /** `KEYCODE_NUMPAD_RIGHT_PAREN`, wire value 163. */
     public const val KEYCODE_NUMPAD_RIGHT_PAREN: Int = 163
-    /** `KEYCODE_VOLUME_MUTE`, wire value 164. */
     public const val KEYCODE_VOLUME_MUTE: Int = 164
-    /** `KEYCODE_INFO`, wire value 165. */
     public const val KEYCODE_INFO: Int = 165
-    /** `KEYCODE_CHANNEL_UP`, wire value 166. */
     public const val KEYCODE_CHANNEL_UP: Int = 166
-    /** `KEYCODE_CHANNEL_DOWN`, wire value 167. */
     public const val KEYCODE_CHANNEL_DOWN: Int = 167
-    /** `KEYCODE_ZOOM_IN`, wire value 168. */
     public const val KEYCODE_ZOOM_IN: Int = 168
-    /** `KEYCODE_ZOOM_OUT`, wire value 169. */
     public const val KEYCODE_ZOOM_OUT: Int = 169
-    /** `KEYCODE_TV`, wire value 170. */
     public const val KEYCODE_TV: Int = 170
-    /** `KEYCODE_WINDOW`, wire value 171. */
     public const val KEYCODE_WINDOW: Int = 171
-    /** `KEYCODE_GUIDE`, wire value 172. */
     public const val KEYCODE_GUIDE: Int = 172
-    /** `KEYCODE_DVR`, wire value 173. */
     public const val KEYCODE_DVR: Int = 173
-    /** `KEYCODE_BOOKMARK`, wire value 174. */
     public const val KEYCODE_BOOKMARK: Int = 174
-    /** `KEYCODE_CAPTIONS`, wire value 175. */
     public const val KEYCODE_CAPTIONS: Int = 175
-    /** `KEYCODE_SETTINGS`, wire value 176. */
     public const val KEYCODE_SETTINGS: Int = 176
-    /** `KEYCODE_TV_POWER`, wire value 177. */
     public const val KEYCODE_TV_POWER: Int = 177
-    /** `KEYCODE_TV_INPUT`, wire value 178. */
     public const val KEYCODE_TV_INPUT: Int = 178
-    /** `KEYCODE_STB_POWER`, wire value 179. */
     public const val KEYCODE_STB_POWER: Int = 179
-    /** `KEYCODE_STB_INPUT`, wire value 180. */
     public const val KEYCODE_STB_INPUT: Int = 180
-    /** `KEYCODE_AVR_POWER`, wire value 181. */
     public const val KEYCODE_AVR_POWER: Int = 181
-    /** `KEYCODE_AVR_INPUT`, wire value 182. */
     public const val KEYCODE_AVR_INPUT: Int = 182
-    /** `KEYCODE_PROG_RED`, wire value 183. */
     public const val KEYCODE_PROG_RED: Int = 183
-    /** `KEYCODE_PROG_GREEN`, wire value 184. */
     public const val KEYCODE_PROG_GREEN: Int = 184
-    /** `KEYCODE_PROG_YELLOW`, wire value 185. */
     public const val KEYCODE_PROG_YELLOW: Int = 185
-    /** `KEYCODE_PROG_BLUE`, wire value 186. */
     public const val KEYCODE_PROG_BLUE: Int = 186
-    /** `KEYCODE_APP_SWITCH`, wire value 187. */
     public const val KEYCODE_APP_SWITCH: Int = 187
-    /** `KEYCODE_LANGUAGE_SWITCH`, wire value 204. */
     public const val KEYCODE_LANGUAGE_SWITCH: Int = 204
-    /** `KEYCODE_ASSIST`, wire value 219. */
     public const val KEYCODE_ASSIST: Int = 219
-    /** `KEYCODE_BRIGHTNESS_DOWN`, wire value 220. */
     public const val KEYCODE_BRIGHTNESS_DOWN: Int = 220
-    /** `KEYCODE_BRIGHTNESS_UP`, wire value 221. */
     public const val KEYCODE_BRIGHTNESS_UP: Int = 221
-    /** `KEYCODE_SLEEP`, wire value 223. */
     public const val KEYCODE_SLEEP: Int = 223
-    /** `KEYCODE_WAKEUP`, wire value 224. */
     public const val KEYCODE_WAKEUP: Int = 224
-    /** `KEYCODE_SOFT_SLEEP`, wire value 276. */
     public const val KEYCODE_SOFT_SLEEP: Int = 276
-
-    /** Every constant above by name; used to check the table against the shared fixtures. */
-    internal val entries: Map<String, Int> = mapOf(
-        "ACTION_DOWN" to ACTION_DOWN,
-        "ACTION_UP" to ACTION_UP,
-        "META_NONE" to META_NONE,
-        "META_SHIFT_ON" to META_SHIFT_ON,
-        "META_ALT_ON" to META_ALT_ON,
-        "META_CTRL_ON" to META_CTRL_ON,
-        "META_META_ON" to META_META_ON,
-        "KEYCODE_UNKNOWN" to KEYCODE_UNKNOWN,
-        "KEYCODE_SOFT_LEFT" to KEYCODE_SOFT_LEFT,
-        "KEYCODE_SOFT_RIGHT" to KEYCODE_SOFT_RIGHT,
-        "KEYCODE_HOME" to KEYCODE_HOME,
-        "KEYCODE_BACK" to KEYCODE_BACK,
-        "KEYCODE_CALL" to KEYCODE_CALL,
-        "KEYCODE_ENDCALL" to KEYCODE_ENDCALL,
-        "KEYCODE_0" to KEYCODE_0,
-        "KEYCODE_1" to KEYCODE_1,
-        "KEYCODE_2" to KEYCODE_2,
-        "KEYCODE_3" to KEYCODE_3,
-        "KEYCODE_4" to KEYCODE_4,
-        "KEYCODE_5" to KEYCODE_5,
-        "KEYCODE_6" to KEYCODE_6,
-        "KEYCODE_7" to KEYCODE_7,
-        "KEYCODE_8" to KEYCODE_8,
-        "KEYCODE_9" to KEYCODE_9,
-        "KEYCODE_STAR" to KEYCODE_STAR,
-        "KEYCODE_POUND" to KEYCODE_POUND,
-        "DPAD_UP" to DPAD_UP,
-        "DPAD_DOWN" to DPAD_DOWN,
-        "DPAD_LEFT" to DPAD_LEFT,
-        "DPAD_RIGHT" to DPAD_RIGHT,
-        "KEYCODE_DPAD_CENTER" to KEYCODE_DPAD_CENTER,
-        "KEYCODE_VOLUME_UP" to KEYCODE_VOLUME_UP,
-        "KEYCODE_VOLUME_DOWN" to KEYCODE_VOLUME_DOWN,
-        "KEYCODE_POWER" to KEYCODE_POWER,
-        "KEYCODE_CAMERA" to KEYCODE_CAMERA,
-        "KEYCODE_CLEAR" to KEYCODE_CLEAR,
-        "KEYCODE_A" to KEYCODE_A,
-        "KEYCODE_B" to KEYCODE_B,
-        "KEYCODE_C" to KEYCODE_C,
-        "KEYCODE_D" to KEYCODE_D,
-        "KEYCODE_E" to KEYCODE_E,
-        "KEYCODE_F" to KEYCODE_F,
-        "KEYCODE_G" to KEYCODE_G,
-        "KEYCODE_H" to KEYCODE_H,
-        "KEYCODE_I" to KEYCODE_I,
-        "KEYCODE_J" to KEYCODE_J,
-        "KEYCODE_K" to KEYCODE_K,
-        "KEYCODE_L" to KEYCODE_L,
-        "KEYCODE_M" to KEYCODE_M,
-        "KEYCODE_N" to KEYCODE_N,
-        "KEYCODE_O" to KEYCODE_O,
-        "KEYCODE_P" to KEYCODE_P,
-        "KEYCODE_Q" to KEYCODE_Q,
-        "KEYCODE_R" to KEYCODE_R,
-        "KEYCODE_S" to KEYCODE_S,
-        "KEYCODE_T" to KEYCODE_T,
-        "KEYCODE_U" to KEYCODE_U,
-        "KEYCODE_V" to KEYCODE_V,
-        "KEYCODE_W" to KEYCODE_W,
-        "KEYCODE_X" to KEYCODE_X,
-        "KEYCODE_Y" to KEYCODE_Y,
-        "KEYCODE_Z" to KEYCODE_Z,
-        "KEYCODE_COMMA" to KEYCODE_COMMA,
-        "KEYCODE_PERIOD" to KEYCODE_PERIOD,
-        "KEYCODE_ALT_LEFT" to KEYCODE_ALT_LEFT,
-        "KEYCODE_ALT_RIGHT" to KEYCODE_ALT_RIGHT,
-        "KEYCODE_SHIFT_LEFT" to KEYCODE_SHIFT_LEFT,
-        "KEYCODE_SHIFT_RIGHT" to KEYCODE_SHIFT_RIGHT,
-        "KEYCODE_TAB" to KEYCODE_TAB,
-        "KEYCODE_SPACE" to KEYCODE_SPACE,
-        "KEYCODE_SYM" to KEYCODE_SYM,
-        "KEYCODE_EXPLORER" to KEYCODE_EXPLORER,
-        "KEYCODE_ENVELOPE" to KEYCODE_ENVELOPE,
-        "ENTER" to ENTER,
-        "DEL" to DEL,
-        "KEYCODE_GRAVE" to KEYCODE_GRAVE,
-        "KEYCODE_MINUS" to KEYCODE_MINUS,
-        "KEYCODE_EQUALS" to KEYCODE_EQUALS,
-        "KEYCODE_LEFT_BRACKET" to KEYCODE_LEFT_BRACKET,
-        "KEYCODE_RIGHT_BRACKET" to KEYCODE_RIGHT_BRACKET,
-        "KEYCODE_BACKSLASH" to KEYCODE_BACKSLASH,
-        "KEYCODE_SEMICOLON" to KEYCODE_SEMICOLON,
-        "KEYCODE_APOSTROPHE" to KEYCODE_APOSTROPHE,
-        "KEYCODE_SLASH" to KEYCODE_SLASH,
-        "KEYCODE_AT" to KEYCODE_AT,
-        "KEYCODE_NUM" to KEYCODE_NUM,
-        "KEYCODE_HEADSETHOOK" to KEYCODE_HEADSETHOOK,
-        "KEYCODE_FOCUS" to KEYCODE_FOCUS,
-        "KEYCODE_PLUS" to KEYCODE_PLUS,
-        "MENU" to MENU,
-        "KEYCODE_NOTIFICATION" to KEYCODE_NOTIFICATION,
-        "KEYCODE_SEARCH" to KEYCODE_SEARCH,
-        "KEYCODE_MEDIA_PLAY_PAUSE" to KEYCODE_MEDIA_PLAY_PAUSE,
-        "KEYCODE_MEDIA_STOP" to KEYCODE_MEDIA_STOP,
-        "KEYCODE_MEDIA_NEXT" to KEYCODE_MEDIA_NEXT,
-        "KEYCODE_MEDIA_PREVIOUS" to KEYCODE_MEDIA_PREVIOUS,
-        "KEYCODE_MEDIA_REWIND" to KEYCODE_MEDIA_REWIND,
-        "KEYCODE_MEDIA_FAST_FORWARD" to KEYCODE_MEDIA_FAST_FORWARD,
-        "KEYCODE_MUTE" to KEYCODE_MUTE,
-        "KEYCODE_PAGE_UP" to KEYCODE_PAGE_UP,
-        "KEYCODE_PAGE_DOWN" to KEYCODE_PAGE_DOWN,
-        "KEYCODE_PICTSYMBOLS" to KEYCODE_PICTSYMBOLS,
-        "KEYCODE_SWITCH_CHARSET" to KEYCODE_SWITCH_CHARSET,
-        "KEYCODE_BUTTON_A" to KEYCODE_BUTTON_A,
-        "KEYCODE_BUTTON_B" to KEYCODE_BUTTON_B,
-        "KEYCODE_BUTTON_C" to KEYCODE_BUTTON_C,
-        "KEYCODE_BUTTON_X" to KEYCODE_BUTTON_X,
-        "KEYCODE_BUTTON_Y" to KEYCODE_BUTTON_Y,
-        "KEYCODE_BUTTON_Z" to KEYCODE_BUTTON_Z,
-        "KEYCODE_BUTTON_L1" to KEYCODE_BUTTON_L1,
-        "KEYCODE_BUTTON_R1" to KEYCODE_BUTTON_R1,
-        "KEYCODE_BUTTON_L2" to KEYCODE_BUTTON_L2,
-        "KEYCODE_BUTTON_R2" to KEYCODE_BUTTON_R2,
-        "KEYCODE_BUTTON_THUMBL" to KEYCODE_BUTTON_THUMBL,
-        "KEYCODE_BUTTON_THUMBR" to KEYCODE_BUTTON_THUMBR,
-        "KEYCODE_BUTTON_START" to KEYCODE_BUTTON_START,
-        "KEYCODE_BUTTON_SELECT" to KEYCODE_BUTTON_SELECT,
-        "KEYCODE_BUTTON_MODE" to KEYCODE_BUTTON_MODE,
-        "KEYCODE_ESCAPE" to KEYCODE_ESCAPE,
-        "FORWARD_DEL" to FORWARD_DEL,
-        "KEYCODE_CTRL_LEFT" to KEYCODE_CTRL_LEFT,
-        "KEYCODE_CTRL_RIGHT" to KEYCODE_CTRL_RIGHT,
-        "KEYCODE_CAPS_LOCK" to KEYCODE_CAPS_LOCK,
-        "KEYCODE_SCROLL_LOCK" to KEYCODE_SCROLL_LOCK,
-        "KEYCODE_META_LEFT" to KEYCODE_META_LEFT,
-        "KEYCODE_META_RIGHT" to KEYCODE_META_RIGHT,
-        "KEYCODE_FUNCTION" to KEYCODE_FUNCTION,
-        "KEYCODE_SYSRQ" to KEYCODE_SYSRQ,
-        "KEYCODE_BREAK" to KEYCODE_BREAK,
-        "KEYCODE_MOVE_HOME" to KEYCODE_MOVE_HOME,
-        "KEYCODE_MOVE_END" to KEYCODE_MOVE_END,
-        "KEYCODE_INSERT" to KEYCODE_INSERT,
-        "KEYCODE_FORWARD" to KEYCODE_FORWARD,
-        "KEYCODE_MEDIA_PLAY" to KEYCODE_MEDIA_PLAY,
-        "KEYCODE_MEDIA_PAUSE" to KEYCODE_MEDIA_PAUSE,
-        "KEYCODE_MEDIA_CLOSE" to KEYCODE_MEDIA_CLOSE,
-        "KEYCODE_MEDIA_EJECT" to KEYCODE_MEDIA_EJECT,
-        "KEYCODE_MEDIA_RECORD" to KEYCODE_MEDIA_RECORD,
-        "KEYCODE_F1" to KEYCODE_F1,
-        "KEYCODE_F2" to KEYCODE_F2,
-        "KEYCODE_F3" to KEYCODE_F3,
-        "KEYCODE_F4" to KEYCODE_F4,
-        "KEYCODE_F5" to KEYCODE_F5,
-        "KEYCODE_F6" to KEYCODE_F6,
-        "KEYCODE_F7" to KEYCODE_F7,
-        "KEYCODE_F8" to KEYCODE_F8,
-        "KEYCODE_F9" to KEYCODE_F9,
-        "KEYCODE_F10" to KEYCODE_F10,
-        "KEYCODE_F11" to KEYCODE_F11,
-        "KEYCODE_F12" to KEYCODE_F12,
-        "KEYCODE_NUM_LOCK" to KEYCODE_NUM_LOCK,
-        "KEYCODE_NUMPAD_0" to KEYCODE_NUMPAD_0,
-        "KEYCODE_NUMPAD_1" to KEYCODE_NUMPAD_1,
-        "KEYCODE_NUMPAD_2" to KEYCODE_NUMPAD_2,
-        "KEYCODE_NUMPAD_3" to KEYCODE_NUMPAD_3,
-        "KEYCODE_NUMPAD_4" to KEYCODE_NUMPAD_4,
-        "KEYCODE_NUMPAD_5" to KEYCODE_NUMPAD_5,
-        "KEYCODE_NUMPAD_6" to KEYCODE_NUMPAD_6,
-        "KEYCODE_NUMPAD_7" to KEYCODE_NUMPAD_7,
-        "KEYCODE_NUMPAD_8" to KEYCODE_NUMPAD_8,
-        "KEYCODE_NUMPAD_9" to KEYCODE_NUMPAD_9,
-        "KEYCODE_NUMPAD_DIVIDE" to KEYCODE_NUMPAD_DIVIDE,
-        "KEYCODE_NUMPAD_MULTIPLY" to KEYCODE_NUMPAD_MULTIPLY,
-        "KEYCODE_NUMPAD_SUBTRACT" to KEYCODE_NUMPAD_SUBTRACT,
-        "KEYCODE_NUMPAD_ADD" to KEYCODE_NUMPAD_ADD,
-        "KEYCODE_NUMPAD_DOT" to KEYCODE_NUMPAD_DOT,
-        "KEYCODE_NUMPAD_COMMA" to KEYCODE_NUMPAD_COMMA,
-        "KEYCODE_NUMPAD_ENTER" to KEYCODE_NUMPAD_ENTER,
-        "KEYCODE_NUMPAD_EQUALS" to KEYCODE_NUMPAD_EQUALS,
-        "KEYCODE_NUMPAD_LEFT_PAREN" to KEYCODE_NUMPAD_LEFT_PAREN,
-        "KEYCODE_NUMPAD_RIGHT_PAREN" to KEYCODE_NUMPAD_RIGHT_PAREN,
-        "KEYCODE_VOLUME_MUTE" to KEYCODE_VOLUME_MUTE,
-        "KEYCODE_INFO" to KEYCODE_INFO,
-        "KEYCODE_CHANNEL_UP" to KEYCODE_CHANNEL_UP,
-        "KEYCODE_CHANNEL_DOWN" to KEYCODE_CHANNEL_DOWN,
-        "KEYCODE_ZOOM_IN" to KEYCODE_ZOOM_IN,
-        "KEYCODE_ZOOM_OUT" to KEYCODE_ZOOM_OUT,
-        "KEYCODE_TV" to KEYCODE_TV,
-        "KEYCODE_WINDOW" to KEYCODE_WINDOW,
-        "KEYCODE_GUIDE" to KEYCODE_GUIDE,
-        "KEYCODE_DVR" to KEYCODE_DVR,
-        "KEYCODE_BOOKMARK" to KEYCODE_BOOKMARK,
-        "KEYCODE_CAPTIONS" to KEYCODE_CAPTIONS,
-        "KEYCODE_SETTINGS" to KEYCODE_SETTINGS,
-        "KEYCODE_TV_POWER" to KEYCODE_TV_POWER,
-        "KEYCODE_TV_INPUT" to KEYCODE_TV_INPUT,
-        "KEYCODE_STB_POWER" to KEYCODE_STB_POWER,
-        "KEYCODE_STB_INPUT" to KEYCODE_STB_INPUT,
-        "KEYCODE_AVR_POWER" to KEYCODE_AVR_POWER,
-        "KEYCODE_AVR_INPUT" to KEYCODE_AVR_INPUT,
-        "KEYCODE_PROG_RED" to KEYCODE_PROG_RED,
-        "KEYCODE_PROG_GREEN" to KEYCODE_PROG_GREEN,
-        "KEYCODE_PROG_YELLOW" to KEYCODE_PROG_YELLOW,
-        "KEYCODE_PROG_BLUE" to KEYCODE_PROG_BLUE,
-        "KEYCODE_APP_SWITCH" to KEYCODE_APP_SWITCH,
-        "KEYCODE_LANGUAGE_SWITCH" to KEYCODE_LANGUAGE_SWITCH,
-        "KEYCODE_ASSIST" to KEYCODE_ASSIST,
-        "KEYCODE_BRIGHTNESS_DOWN" to KEYCODE_BRIGHTNESS_DOWN,
-        "KEYCODE_BRIGHTNESS_UP" to KEYCODE_BRIGHTNESS_UP,
-        "KEYCODE_SLEEP" to KEYCODE_SLEEP,
-        "KEYCODE_WAKEUP" to KEYCODE_WAKEUP,
-        "KEYCODE_SOFT_SLEEP" to KEYCODE_SOFT_SLEEP,
-    )
 }
 
 /** Browser `KeyboardEvent.code` values mapped to Android key codes. */

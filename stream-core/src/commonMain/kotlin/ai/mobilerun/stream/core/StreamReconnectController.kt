@@ -16,7 +16,7 @@ public enum class StreamReconnectStatus {
     /** An attempt failed; waiting out the backoff or retrying. */
     Reconnecting,
 
-    /** The retry budget is exhausted; only [StreamReconnectController.retry] or [StreamReconnectController.handleWake] restart it. */
+    /** The retry budget is exhausted; only [StreamReconnectController.retry] or `handleWake` restart it. */
     Unavailable,
 }
 
@@ -26,6 +26,8 @@ public enum class StreamReconnectStatus {
  * @property status the current [StreamReconnectStatus].
  * @property attempt consecutive failed attempts so far: the 1-based number of the upcoming (or
  *   in-flight) reconnect attempt. 0 while connecting fresh or after the stability window refilled the budget.
+ *
+ * Fields are never added to this constructor; a new field gets a new type.
  */
 public data class StreamReconnectSnapshot(val status: StreamReconnectStatus, val attempt: Int)
 
@@ -80,6 +82,7 @@ public class StreamReconnectController(
     private val random: () -> Double = { Random.nextDouble() },
 ) {
     private var enabled = false
+    private var disposed = false
     private var status = StreamReconnectStatus.Connecting
     private var attempt = 0
 
@@ -103,9 +106,10 @@ public class StreamReconnectController(
 
     /** The stream connection (re)started; arms the connect watchdog. */
     public fun attemptMounted() {
+        if (disposed) return
         enabled = true
         // A mount during a backoff wait is stale: the scheduled attempt owns the next watchdog.
-        if (backoffTimer != null || status == StreamReconnectStatus.Unavailable) return
+        if (recoveryIsScheduled) return
         watchdogTimer = cancel(watchdogTimer)
         everConnectedThisEpoch = false
         failureLatched = false
@@ -122,7 +126,8 @@ public class StreamReconnectController(
     }
 
     /** There is no stream target anymore: stops all timers and resets the counters. */
-    public fun setDisabled() {
+    public fun disable() {
+        if (disposed) return
         enabled = false
         clearAllTimers()
         everConnectedThisEpoch = false
@@ -137,9 +142,9 @@ public class StreamReconnectController(
 
     /** The peer connection reached the connected state. */
     public fun handleConnected() {
-        if (!enabled) return
+        if (disposed || !enabled) return
         watchdogTimer = cancel(watchdogTimer)
-        // The old attempt recovered on its own (transient dip); the scheduled remount would only interrupt it again.
+        // The old attempt recovered on its own (transient dip); a scheduled remount would interrupt it.
         backoffTimer = cancel(backoffTimer)
         everConnectedThisEpoch = true
         failureLatched = false
@@ -161,15 +166,15 @@ public class StreamReconnectController(
 
     /** The peer connection left the connected state. Only counts as a failure after it had connected once. */
     public fun handleDisconnected() {
-        if (!enabled) return
+        if (disposed || !enabled) return
         if (!everConnectedThisEpoch) return
         if (failureLatched) return
         countFailure()
     }
 
-    /** Terminal failure of the current attempt: the socket died, the peer connection failed or negotiation threw. */
+    /** Terminal failure of the attempt: the socket died, the peer connection failed or negotiation threw. */
     public fun handleFailure() {
-        if (!enabled) return
+        if (disposed || !enabled) return
         if (failureLatched) return
         countFailure()
     }
@@ -180,12 +185,11 @@ public class StreamReconnectController(
      * itself) and while unavailable (retry and wake own recovery there). Everywhere else the new
      * target applies immediately.
      */
-    public fun shouldDeferTargetChange(): Boolean =
-        backoffTimer != null || status == StreamReconnectStatus.Unavailable
+    public fun shouldDeferTargetChange(): Boolean = recoveryIsScheduled
 
     /** The app became visible or the device came back online. */
     public fun handleWake() {
-        if (!enabled) return
+        if (disposed || !enabled) return
         if (status == StreamReconnectStatus.Unavailable) {
             freshCycle()
             return
@@ -199,17 +203,22 @@ public class StreamReconnectController(
 
     /** Manual retry (an "unavailable" screen's button). Only acts while unavailable. */
     public fun retry() {
-        if (!enabled) return
+        if (disposed || !enabled) return
         if (status == StreamReconnectStatus.Unavailable) freshCycle()
     }
 
-    /** Stops all timers; the controller is not meant to be used afterwards. */
+    /** Stops all timers. Afterwards every method, [attemptMounted] included, does nothing. */
     public fun dispose() {
+        disposed = true
         enabled = false
         clearAllTimers()
     }
 
-    private fun emit() = onSnapshot(StreamReconnectSnapshot(status, attempt))
+    // A backoff wait is pending, or we gave up: new mounts, failures and target changes must not disturb it.
+    private val recoveryIsScheduled: Boolean
+        get() = backoffTimer != null || status == StreamReconnectStatus.Unavailable
+
+    private fun emit() = onSnapshot(snapshot)
 
     private fun cancel(task: ScheduledTask?): ScheduledTask? {
         task?.cancel()
@@ -224,7 +233,7 @@ public class StreamReconnectController(
 
     private fun countFailure() {
         // A wait is already scheduled (or we already gave up), e.g. a stale watchdog. Never stack timers.
-        if (backoffTimer != null || status == StreamReconnectStatus.Unavailable) return
+        if (recoveryIsScheduled) return
         failureLatched = true
         watchdogTimer = cancel(watchdogTimer)
         stabilityTimer = cancel(stabilityTimer)

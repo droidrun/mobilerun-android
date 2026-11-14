@@ -19,7 +19,11 @@ internal val SignallingJson: Json = Json {
     classDiscriminator = "type"
 }
 
-/** A text frame the client sends over the signalling WebSocket. The JSON `type` field is the discriminator. */
+/**
+ * A text frame the client sends over the signalling WebSocket. The JSON `type` field is the discriminator.
+ *
+ * Messages are data classes. Fields are never added to an existing constructor; a new field gets a new type.
+ */
 @Serializable
 public sealed interface ClientMessage {
     /** The frame as the JSON text to put on the WebSocket. */
@@ -53,8 +57,8 @@ public sealed interface ClientMessage {
      * event is not sent.
      *
      * @property candidate SDP candidate line.
-     * @property sdpMid media stream id, may be `null`; always written, as an explicit `null` if unset.
-     * @property sdpMLineIndex media line index, may be `null`; always written, as an explicit `null` if unset.
+     * @property sdpMid media stream id, may be `null`; always written, as an explicit `null`.
+     * @property sdpMLineIndex media line index, may be `null`; always written, as an explicit `null`.
      * @property sessionId id of this stream session.
      */
     @Serializable
@@ -88,13 +92,14 @@ public sealed interface ClientMessage {
     /**
      * Optional; sent once when the control channel opens if the embedding app supplied a URL to open.
      *
-     * @property url the URL to open on the device; build it with [create] to apply the
-     *   percent-decoding the reference client applies.
+     * @property url the URL to open on the device. Messages are only built with [create], which
+     *   applies the percent-decoding the reference client applies.
      * @property sessionId id of this stream session.
      */
     @Serializable
     @SerialName("openUrl")
-    public data class OpenUrl(val url: String, val sessionId: String) : ClientMessage {
+    @ConsistentCopyVisibility
+    public data class OpenUrl internal constructor(val url: String, val sessionId: String) : ClientMessage {
         /** Factory for [OpenUrl]. */
         public companion object {
             /**
@@ -118,12 +123,14 @@ public sealed interface ClientMessage {
     public data class ScreenshotRequest(val id: String) : ClientMessage
 }
 
-/** A text frame received over the signalling WebSocket. The JSON `type` field is the discriminator. */
+/**
+ * A text frame received over the signalling WebSocket. The JSON `type` field is the discriminator.
+ *
+ * Messages are plain classes created by [parse] only, so that fields can be added without breaking
+ * callers (no `copy`, no destructuring, no generated equality).
+ */
 @Serializable
 public sealed interface ServerMessage {
-    /** The frame as JSON text. Servers produce these; clients use it for tests and fakes. */
-    public fun toJson(): String = SignallingJson.encodeToString(ServerMessage.serializer(), this)
-
     /**
      * SDP answer to the latest offer (initial or ICE restart).
      *
@@ -131,7 +138,7 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("answer")
-    public data class Answer(val sdp: String) : ServerMessage
+    public class Answer internal constructor(public val sdp: String) : ServerMessage
 
     /**
      * A remote ICE candidate. Buffer it until the remote description is set, then apply it in arrival order.
@@ -142,10 +149,10 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("candidate")
-    public data class Candidate(
-        val candidate: String,
-        @EncodeDefault val sdpMid: String? = null,
-        @EncodeDefault val sdpMLineIndex: Int? = null,
+    public class Candidate internal constructor(
+        public val candidate: String,
+        @EncodeDefault public val sdpMid: String? = null,
+        @EncodeDefault public val sdpMLineIndex: Int? = null,
     ) : ServerMessage
 
     /**
@@ -158,8 +165,8 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("rtcConfiguration")
-    public data class RtcConfiguration(
-        @SerialName("rtcConfiguration") val configuration: JsonObject? = null,
+    public class RtcConfiguration internal constructor(
+        @SerialName("rtcConfiguration") public val configuration: JsonObject? = null,
     ) : ServerMessage {
         /**
          * The ICE servers in [configuration], or `null` if there are none or they are malformed.
@@ -179,22 +186,28 @@ public sealed interface ServerMessage {
     /**
      * Successful screenshot reply.
      *
-     * @property id id of the [ClientMessage.ScreenshotRequest] it answers; ignore it if no request is pending for it.
+     * @property id id of the [ClientMessage.ScreenshotRequest] it answers; ignore it if none is pending.
      * @property dataUri the image as a data URI, for example `data:image/png;base64,...`.
      */
     @Serializable
     @SerialName("screenshot")
-    public data class Screenshot(val id: String, val dataUri: String) : ServerMessage
+    public class Screenshot internal constructor(
+        public val id: String,
+        public val dataUri: String,
+    ) : ServerMessage
 
     /**
      * Failed screenshot reply.
      *
-     * @property id id of the [ClientMessage.ScreenshotRequest] it answers; ignore it if no request is pending for it.
+     * @property id id of the [ClientMessage.ScreenshotRequest] it answers; ignore it if none is pending.
      * @property message human-readable failure reason.
      */
     @Serializable
     @SerialName("screenshotError")
-    public data class ScreenshotError(val id: String, val message: String) : ServerMessage
+    public class ScreenshotError internal constructor(
+        public val id: String,
+        public val message: String,
+    ) : ServerMessage
 
     /** Parser entry point. */
     public companion object {
@@ -212,15 +225,17 @@ public sealed interface ServerMessage {
     }
 }
 
+internal fun ServerMessage.toJson(): String = SignallingJson.encodeToString(ServerMessage.serializer(), this)
+
 /** An ICE server entry of an [ServerMessage.RtcConfiguration]. */
 @Serializable
-public data class IceServer(
+public class IceServer internal constructor(
     /** One or more server URLs; a single JSON string is read as a one-element list. */
-    @Serializable(with = UrlListSerializer::class) val urls: List<String>,
+    @Serializable(with = UrlListSerializer::class) public val urls: List<String>,
     /** TURN username, if any. */
-    val username: String? = null,
+    public val username: String? = null,
     /** TURN credential, if any. */
-    val credential: String? = null,
+    public val credential: String? = null,
 )
 
 /** Where the connection is, which decides how a received frame is treated. */
@@ -244,11 +259,12 @@ public sealed interface ServerFrame {
     /** Valid but irrelevant or unknown; drop it silently. */
     public data object Ignored : ServerFrame
 
-    /** The frame invalidates the connection attempt while awaiting the ICE configuration; report a failure. */
+    /** The frame invalidates the attempt while awaiting the ICE configuration; report a failure. */
     public data object StartupFailure : ServerFrame
 }
 
-internal object UrlListSerializer : JsonTransformingSerializer<List<String>>(ListSerializer(String.serializer())) {
+internal object UrlListSerializer :
+    JsonTransformingSerializer<List<String>>(ListSerializer(String.serializer())) {
     override fun transformDeserialize(element: JsonElement): JsonElement =
         if (element is JsonArray) element else JsonArray(listOf(element))
 }

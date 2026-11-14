@@ -30,14 +30,7 @@ def const_object(name, doc, entries):
         assert IDENT.match(key), f"not a Kotlin identifier: {key}"
     lines = [f"/** {doc} */", f"public object {name} {{"]
     for key, value in entries.items():
-        lines.append(f"    /** `{key}`, wire value {value}. */")
         lines.append(f"    public const val {key}: Int = {value}")
-    lines.append("")
-    lines.append("    /** Every constant above by name; used to check the table against the shared fixtures. */")
-    lines.append("    internal val entries: Map<String, Int> = mapOf(")
-    for key in entries:
-        lines.append(f'        "{key}" to {key},')
-    lines.append("    )")
     lines.append("}")
     return "\n".join(lines)
 

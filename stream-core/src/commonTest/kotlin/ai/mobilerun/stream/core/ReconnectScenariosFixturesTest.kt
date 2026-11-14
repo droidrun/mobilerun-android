@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.conformance.fixtureObject
+import ai.mobilerun.stream.conformance.runFixtureCases
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.double
@@ -37,7 +39,7 @@ class ReconnectScenariosFixturesTest {
             "failure" -> controller.handleFailure()
             "wake" -> controller.handleWake()
             "retry" -> controller.retry()
-            "disable" -> controller.setDisabled()
+            "disable" -> controller.disable()
             "dispose" -> controller.dispose()
             else -> error("unknown event $event")
         }
@@ -49,7 +51,10 @@ class ReconnectScenariosFixturesTest {
     fun theEventVocabularyIsTheOneThisReplayUnderstands() {
         val events = fixtureObject(file).getValue("events").jsonArray.map { it.jsonPrimitive.content }
         assertEquals(
-            listOf("attempt_mounted", "connected", "disconnected", "failure", "wake", "retry", "disable", "dispose"),
+            listOf(
+                "attempt_mounted", "connected", "disconnected", "failure",
+                "wake", "retry", "disable", "dispose",
+            ),
             events,
         )
     }
@@ -62,18 +67,19 @@ class ReconnectScenariosFixturesTest {
             val harness = Harness(scenario.getValue("random").jsonPrimitive.double)
             val steps = scenario.getValue("steps").jsonArray.map { it.jsonObject }
             val expects = scenario.getValue("expect").jsonArray.map { it.jsonObject }
+            val expectsAfterStep = expects.groupBy { it.int("after_steps") }
             var evaluated = 0
-            var i = 0
-            while (true) {
-                for (expect in expects.filter { it.int("after_steps") == i }.sortedBy { it.getValue("at_ms").jsonPrimitive.long }) {
+            for (i in 0..steps.size) {
+                val due = expectsAfterStep[i].orEmpty().sortedBy { it.getValue("at_ms").jsonPrimitive.long }
+                for (expect in due) {
                     harness.clock.advanceTo(expect.getValue("at_ms").jsonPrimitive.long)
                     check(expect, harness, "at ${expect.getValue("at_ms")} ms after $i steps")
                     evaluated += 1
                 }
-                if (i >= steps.size) break
-                harness.clock.advanceTo(steps[i].getValue("at_ms").jsonPrimitive.long)
-                harness.apply(steps[i].getValue("event").jsonPrimitive.content)
-                i += 1
+                if (i < steps.size) {
+                    harness.clock.advanceTo(steps[i].getValue("at_ms").jsonPrimitive.long)
+                    harness.apply(steps[i].getValue("event").jsonPrimitive.content)
+                }
             }
             assertEquals(expects.size, evaluated, "every expectation is evaluated")
             expectations += evaluated
@@ -83,12 +89,14 @@ class ReconnectScenariosFixturesTest {
 
     private fun check(expect: JsonObject, harness: Harness, where: String) {
         val snapshot = harness.controller.snapshot
-        assertEquals(expect.getValue("status").jsonPrimitive.content, snapshot.status.name.lowercase(), "status $where")
+        val status = snapshot.status.name.lowercase()
+        assertEquals(expect.getValue("status").jsonPrimitive.content, status, "status $where")
         assertEquals(expect.int("attempt"), snapshot.attempt, "attempt $where")
         assertEquals(expect.int("heal_calls"), harness.healCalls, "heal_calls $where")
         assertEquals(expect.int("remount_calls"), harness.remountCalls, "remount_calls $where")
         expect["defer_target_change"]?.let {
-            assertEquals(it.jsonPrimitive.boolean, harness.controller.shouldDeferTargetChange(), "defer_target_change $where")
+            val defer = harness.controller.shouldDeferTargetChange()
+            assertEquals(it.jsonPrimitive.boolean, defer, "defer_target_change $where")
         }
         expect["pending_timers"]?.let {
             assertEquals(it.jsonPrimitive.int, harness.clock.pendingTimers, "pending_timers $where")

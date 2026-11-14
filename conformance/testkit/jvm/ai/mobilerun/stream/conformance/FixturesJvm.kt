@@ -1,7 +1,7 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
-package ai.mobilerun.stream.protocol
+package ai.mobilerun.stream.conformance
 
 import java.io.File
 
