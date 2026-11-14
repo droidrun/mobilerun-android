@@ -13,10 +13,14 @@ import ai.mobilerun.stream.protocol.SignallingPhase
 import ai.mobilerun.stream.protocol.SignallingTiming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,19 +28,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
-/** Tunables of [StreamSessionEngine] that are not part of the protocol. */
-public class StreamEngineOptions(
-    /** How often the credentials provider is asked again while it keeps returning `null`. */
-    public val credentialsPollIntervalMs: Long = 2_000,
-)
+/** How often the credentials provider is asked again while it keeps returning `null`. */
+internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 2_000
 
 /**
  * The connection logic of one device stream, independent of any platform: it drives a
@@ -45,16 +46,17 @@ public class StreamEngineOptions(
  * `use-stream-reconnect.ts` does.
  *
  * ## Threading
- * All state lives on the dispatcher of [scope], which **must run coroutines one at a time** (a
- * single thread, `limitedParallelism(1)`, or a test dispatcher). Transport callbacks may come from
- * any thread; they are posted to [scope] in order. [sendControl], [sendHover] and [close] may be
- * called from any thread, the other functions too (they hop onto [scope]).
+ * The engine runs all its work on the dispatcher of [scope], made serial with `limitedParallelism(1)`,
+ * so its state needs no locks. Transport callbacks may come from any thread; they are posted to that
+ * serial context in order. [sendControl], [sendHover], [openUrl], [screenshot], [retry] and [close]
+ * may be called from any thread. Everything is released on that serial context, never on the
+ * caller's thread, when [close] is called or [scope] is cancelled.
  *
  * ## Deviation from the browser behaviour
  * The reference client lets the peer connection decide when the signalling socket dies while media
  * still flows. The bridge ends the session when the socket closes, so here the end of the socket,
  * before or after it opened, always counts as a connection failure and rebuilds the whole
- * connection.
+ * connection; the attempt whose socket ended cannot report itself connected afterwards.
  *
  * ## Credentials
  * The provider is called at [start], once per reconnect cycle (the reconnect controller's heal),
@@ -62,30 +64,29 @@ public class StreamEngineOptions(
  * with a reconnect, except while a backoff wait or the unavailable state is in progress: then they
  * are held for the next attempt (same rule as the reference client).
  *
- * @param scope scope whose dispatcher runs the engine; the engine's work is a child of its job.
+ * @param scope scope whose dispatcher runs the engine and whose cancellation closes it.
  * @param credentials where the stream is and how to open it.
  * @param signalling opens the signalling socket.
  * @param peers creates the peer connection.
- * @param options see [StreamEngineOptions].
  * @param random jitter source of the reconnect backoff, in `[0, 1)`.
  * @param nowMs a monotonic millisecond clock; tests pass the virtual clock.
  * @param newSessionId creates the session id of a connection attempt.
  * @param logger optional diagnostics.
  */
+@InternalStreamApi
 public class StreamSessionEngine(
     scope: CoroutineScope,
     private val credentials: StreamCredentialsProvider,
     private val signalling: SignallingTransportFactory,
     private val peers: PeerTransportFactory,
-    private val options: StreamEngineOptions = StreamEngineOptions(),
     random: () -> Double = { Random.nextDouble() },
     private val nowMs: () -> Long = monotonicMillis(),
     private val newSessionId: () -> String = ::randomSessionId,
     private val logger: StreamLogger? = null,
 ) {
-    private val callerContext = scope.coroutineContext
-    private val job = SupervisorJob(callerContext[Job])
-    private val engineScope = CoroutineScope(callerContext + job)
+    private val engineJob = SupervisorJob(scope.coroutineContext[Job])
+    private val serial: CoroutineDispatcher = serialDispatcher(scope)
+    private val engineScope = CoroutineScope(scope.coroutineContext + serial + engineJob)
 
     private val mutableStatus = MutableStateFlow<StreamStatus>(StreamStatus.Connecting)
 
@@ -97,13 +98,13 @@ public class StreamSessionEngine(
         onSnapshot = ::onSnapshot,
         onHeal = ::requestCredentialRefresh,
         scheduler = { delayMs, action ->
-            val timer = launchGuarded { delay(delayMs); action() }
+            val timer = engineScope.launchGuarded { delay(delayMs); action() }
             ScheduledTask { timer.cancel() }
         },
         random = random,
     )
 
-    @Volatile private var closed = false
+    private val closed: Boolean get() = !engineJob.isActive
     private var started = false
 
     // The newest credentials the provider returned, and the ones the live connection was opened with.
@@ -114,9 +115,20 @@ public class StreamSessionEngine(
     @Volatile private var connection: Connection? = null
     private var pendingOpenUrl: String? = null
 
+    init {
+        // One release path for close() and for the cancellation of the host scope: it runs on the
+        // serial context once every engine coroutine has ended.
+        engineJob.invokeOnCompletion {
+            CoroutineScope(serial).launch {
+                controller.dispose()
+                releaseConnection()
+            }
+        }
+    }
+
     /** Starts connecting. Does nothing if already started or closed. */
     public fun start() {
-        launchGuarded {
+        engineScope.launchGuarded {
             if (started || closed) return@launchGuarded
             started = true
             while (!closed) {
@@ -127,45 +139,39 @@ public class StreamSessionEngine(
                     return@launchGuarded
                 }
                 log("credentials not ready")
-                delay(options.credentialsPollIntervalMs)
+                delay(CREDENTIALS_POLL_INTERVAL_MS)
             }
         }
     }
 
     /** Starts a fresh reconnect cycle after the stream became [StreamStatus.Unavailable]; otherwise does nothing. */
     public fun retry() {
-        launchGuarded { controller.retry() }
+        engineScope.launchGuarded { controller.retry() }
     }
 
-    /** Stops the session and releases the connection. Afterwards nothing happens anymore. */
+    /** Stops the session; its connection is released shortly after. Afterwards nothing happens anymore. */
     public fun close() {
-        if (closed) return
-        closed = true
-        controller.dispose()
-        job.cancel()
-        val live = connection
-        connection = null
-        live?.release()
+        engineJob.cancel()
     }
 
     /**
      * Sends [bytes] on the control channel. Returns `false`, dropping them, if the channel is not
      * open.
      */
-    public fun sendControl(bytes: ByteArray): Boolean = connection?.sendControl(bytes) ?: false
+    public fun sendControl(bytes: ByteArray): Boolean = !closed && connection?.sendControl(bytes) == true
 
     /**
      * Sends [bytes] on the hover channel only, never on the control channel. Returns `false`,
      * dropping them, if the hover channel is not open.
      */
-    public fun sendHover(bytes: ByteArray): Boolean = connection?.sendHover(bytes) ?: false
+    public fun sendHover(bytes: ByteArray): Boolean = !closed && connection?.sendHover(bytes) == true
 
     /**
      * Asks the device to open [url]. Sent right away if the control channel is open; otherwise it is
      * sent once when the next connection's control channel opens.
      */
     public fun openUrl(url: String) {
-        launchGuarded {
+        engineScope.launchGuarded {
             val live = connection
             if (live != null && live.controlOpen) {
                 live.sendOpenUrl(url)
@@ -185,7 +191,7 @@ public class StreamSessionEngine(
      * @throws ScreenshotTimeoutException if no reply arrived within [timeout].
      */
     public suspend fun screenshot(timeout: Duration = SignallingTiming.SCREENSHOT_TIMEOUT_MS.milliseconds): ByteArray =
-        withContext(callerContext.minusKey(Job)) {
+        withContext(serial) {
             val live = connection?.takeIf { it.wsOpen } ?: throw StreamNotConnectedException()
             val id = "ui-ss-${nowMs()}-${randomSessionId().take(7)}"
             val reply = CompletableDeferred<ByteArray>()
@@ -224,7 +230,7 @@ public class StreamSessionEngine(
         mutableStatus.value = snapshot.toStatus()
         log("status ${snapshot.status} attempt=${snapshot.attempt}")
         // A target change that was held back may be applicable now.
-        launchGuarded { applyPendingTarget() }
+        engineScope.launchGuarded { applyPendingTarget() }
     }
 
     private fun applyPendingTarget() {
@@ -248,14 +254,14 @@ public class StreamSessionEngine(
     /** Asks the provider for fresh credentials unless a request is already running. */
     private fun requestCredentialRefresh() {
         if (closed || credentialsJob?.isActive == true) return
-        credentialsJob = launchGuarded {
+        credentialsJob = engineScope.launchGuarded {
             val fresh = fetchCredentials() ?: return@launchGuarded
             latestTarget = fresh
             applyPendingTarget()
         }
     }
 
-    private fun launchGuarded(block: suspend () -> Unit): Job = engineScope.launch {
+    private fun CoroutineScope.launchGuarded(block: suspend () -> Unit): Job = launch {
         try {
             block()
         } catch (e: CancellationException) {
@@ -274,21 +280,25 @@ public class StreamSessionEngine(
 
     /** One WebSocket plus one peer connection; everything about it is dropped when it is released. */
     private inner class Connection(private val target: StreamCredentials) : SignallingListener, PeerListener {
+        // Timers and posted events of this attempt; cancelled as a whole by release().
+        private val scope = CoroutineScope(engineScope.coroutineContext + SupervisorJob(engineJob))
         private val sessionId = newSessionId()
         private var ws: SignallingTransport? = null
-        private var peer: PeerTransport? = null
+        @Volatile private var peer: PeerTransport? = null
         private var phase = SignallingPhase.AwaitingRtcConfiguration
         private var released = false
-        private var startupFailed = false
-        private val timers = mutableListOf<Job>()
+
+        // The attempt failed (startup, socket end, negotiation, peer failed or closed): nothing it
+        // reports afterwards may cancel the rebuild the failure scheduled.
+        private var failed = false
         private var handshakeTimer: Job? = null
         private var restartRecheck: Job? = null
 
         @Volatile var wsOpen = false
             private set
-        @Volatile var controlOpen = false
+        var controlOpen = false
             private set
-        @Volatile private var hoverOpen = false
+        private var hoverOpen = false
 
         // Remote candidates wait here until the remote description (or the restart answer) is set.
         private var remoteDescriptionSet = false
@@ -299,22 +309,24 @@ public class StreamSessionEngine(
 
         val screenshots = HashMap<String, CompletableDeferred<ByteArray>>()
 
-        private val isCurrent: Boolean get() = !released && connection === this
+        private val isCurrent: Boolean get() = !released && !closed && connection === this
 
         fun start() {
             try {
-                ws = signalling.open(target, this)
+                val opened = signalling.open(target, this)
+                if (isCurrent) ws = opened else opened.close()
             } catch (e: Exception) {
                 log("signalling open failed: ${e::class.simpleName}")
                 fail()
                 return
             }
-            handshakeTimer = after(SignallingTiming.WS_OPEN_TIMEOUT_MS) {
+            handshakeTimer = scope.launchGuarded {
+                delay(SignallingTiming.WS_OPEN_TIMEOUT_MS)
                 log("websocket open timeout")
-                failStartup()
+                fail()
             }
             // Armed at mount, not at open: ticks before the socket is open are skipped.
-            timers += launchGuarded {
+            scope.launchGuarded {
                 while (true) {
                     delay(SignallingTiming.KEEP_ALIVE_INTERVAL_MS)
                     if (isCurrent && wsOpen) send(ClientMessage.KeepAlive(sessionId))
@@ -328,9 +340,7 @@ public class StreamSessionEngine(
             wsOpen = false
             controlOpen = false
             hoverOpen = false
-            timers.forEach { it.cancel() }
-            timers.clear()
-            restartRecheck?.cancel()
+            scope.cancel()
             val pending = screenshots.values.toList()
             screenshots.clear()
             pending.forEach { it.completeExceptionally(StreamDisconnectedException()) }
@@ -344,68 +354,59 @@ public class StreamSessionEngine(
             send(ClientMessage.OpenUrl.create(url, sessionId))
         }
 
-        fun sendControl(bytes: ByteArray): Boolean = controlOpen && peer?.sendControl(bytes) == true
+        // The peer transport drops sends while its channel is not open.
+        fun sendControl(bytes: ByteArray): Boolean = !released && peer?.sendControl(bytes) == true
 
-        fun sendHover(bytes: ByteArray): Boolean = hoverOpen && peer?.sendHover(bytes) == true
+        fun sendHover(bytes: ByteArray): Boolean = !released && peer?.sendHover(bytes) == true
 
         // A failure of this attempt: the reconnect controller decides what happens next.
         private fun fail() {
-            if (!isCurrent) return
+            if (!isCurrent || failed) return
+            failed = true
+            handshakeTimer?.cancel()
             controller.handleFailure()
         }
 
-        private fun failStartup() {
-            if (!isCurrent || startupFailed) return
-            startupFailed = true
-            handshakeTimer?.cancel()
-            fail()
-        }
-
-        private fun after(delayMs: Long, action: () -> Unit): Job {
-            val timer = launchGuarded { delay(delayMs); action() }
-            timers += timer
-            return timer
-        }
-
         private fun post(block: suspend () -> Unit) {
-            launchGuarded { if (isCurrent) block() }
+            scope.launchGuarded { if (isCurrent) block() }
         }
 
         // ---- SignallingListener (any thread) ----
 
         override fun onOpen() = post {
-            if (startupFailed) return@post
+            if (failed) return@post
             wsOpen = true
             handshakeTimer?.cancel()
             send(ClientMessage.RequestRtcConfiguration(sessionId))
-            handshakeTimer = after(SignallingTiming.RTC_CONFIG_TIMEOUT_MS) {
+            handshakeTimer = scope.launchGuarded {
+                delay(SignallingTiming.RTC_CONFIG_TIMEOUT_MS)
                 log("rtcConfiguration timeout")
-                failStartup()
+                fail()
             }
         }
 
         override fun onClosed() = post {
             wsOpen = false
-            if (startupFailed) return@post
+            if (failed) return@post
             log("websocket closed")
             fail()
         }
 
         override fun onFailure(httpStatus: Int?) = post {
             wsOpen = false
-            if (startupFailed) return@post
+            if (failed) return@post
             log("websocket failed http=$httpStatus")
             fail()
             if (httpStatus == HTTP_UNAUTHORIZED || httpStatus == HTTP_FORBIDDEN) requestCredentialRefresh()
         }
 
         override fun onMessage(text: String) = post {
-            if (startupFailed) return@post
+            if (failed) return@post
             when (val frame = ServerMessage.parse(text, phase)) {
                 ServerFrame.Ignored -> Unit
                 ServerFrame.StartupFailure -> {
                     log("invalid message while awaiting rtcConfiguration")
-                    failStartup()
+                    fail()
                 }
                 is ServerFrame.Message -> handle(frame.message)
             }
@@ -437,19 +438,23 @@ public class StreamSessionEngine(
             remoteDescriptionSet = false
             pendingCandidates.clear()
             iceRestartGraceUntil = 0
+            val servers = message.iceServers
+            if (servers == null && message.configuration?.containsKey("iceServers") == true) {
+                log("malformed ice servers")
+                fail()
+                return
+            }
             try {
-                val servers = message.iceServers
-                if (servers == null && message.configuration?.containsKey("iceServers") == true) {
-                    throw IllegalArgumentException("malformed ice servers")
-                }
-                val policy = (message.configuration?.get("iceTransportPolicy") as? JsonPrimitive)?.content
                 val created = peers.create(
-                    PeerConfiguration(servers.orEmpty(), policy),
+                    PeerConfiguration(servers.orEmpty(), message.iceTransportPolicy),
                     listOf(DataChannels.control, DataChannels.hover),
                     this,
                 )
+                if (!isCurrent) {
+                    created.close()
+                    return
+                }
                 peer = created
-                if (!isCurrent) return
                 val sdp = created.createOffer(iceRestart = false)
                 if (!isCurrent || peer !== created) return
                 send(ClientMessage.Offer(sdp, sessionId))
@@ -457,9 +462,7 @@ public class StreamSessionEngine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!isCurrent) return
                 log("negotiation failed: ${e::class.simpleName}")
-                startupFailed = true
                 fail()
             }
         }
@@ -510,12 +513,7 @@ public class StreamSessionEngine(
         private suspend fun refresh(message: ServerMessage.RtcConfiguration) {
             val active = peer ?: return
             val servers = message.iceServers ?: return
-            val applied = try {
-                active.setIceServers(servers)
-            } catch (e: Exception) {
-                false
-            }
-            if (!applied) {
+            if (!active.setIceServers(servers)) {
                 log("refresh: setIceServers rejected, skipping ICE restart")
                 return
             }
@@ -545,12 +543,14 @@ public class StreamSessionEngine(
 
         override fun onConnectionState(state: PeerConnectionState) = post { handleConnectionState(state) }
 
-        override fun onChannelState(channel: DataChannelSpec, open: Boolean) {
+        override fun onChannelState(channel: DataChannelSpec, open: Boolean) = post {
             when (channel.id) {
-                DataChannels.control.id -> controlOpen = open
+                DataChannels.control.id -> {
+                    controlOpen = open
+                    if (open) onControlOpened()
+                }
                 DataChannels.hover.id -> hoverOpen = open
             }
-            if (open && channel.id == DataChannels.control.id) post { onControlOpened() }
         }
 
         private fun onControlOpened() {
@@ -558,7 +558,7 @@ public class StreamSessionEngine(
             // Like the reference client: schedule the frame requests, then send the URL, so the
             // URL goes out first and the requests follow at +0, +125, ... ms.
             for (i in 0 until SignallingTiming.REQUEST_FRAME_COUNT) {
-                timers += launchGuarded {
+                scope.launchGuarded {
                     delay(i * SignallingTiming.REQUEST_FRAME_INTERVAL_MS)
                     if (isCurrent) send(ClientMessage.RequestFrame(sessionId))
                 }
@@ -571,27 +571,31 @@ public class StreamSessionEngine(
 
         private fun handleConnectionState(state: PeerConnectionState) {
             log("peer connection $state")
-            val terminal = state == PeerConnectionState.Failed || state == PeerConnectionState.Closed
-            if (terminal) controller.handleFailure()
-            val connected = state == PeerConnectionState.Connected
-            if (connected) {
-                iceRestartGraceUntil = 0
-            } else if (nowMs() < iceRestartGraceUntil && !terminal) {
-                // Media still flows on the old pair during a restart; recheck when the window ends.
-                scheduleRestartRecheck()
-                return
+            when {
+                failed -> Unit
+                state == PeerConnectionState.Failed || state == PeerConnectionState.Closed -> fail()
+                state == PeerConnectionState.Connected -> {
+                    iceRestartGraceUntil = 0
+                    restartRecheck?.cancel()
+                    restartRecheck = null
+                    controller.handleConnected()
+                }
+                // Media still flows on the old pair during an ICE restart; recheck when the window ends.
+                nowMs() < iceRestartGraceUntil -> scheduleRestartRecheck()
+                else -> {
+                    restartRecheck?.cancel()
+                    restartRecheck = null
+                    controller.handleDisconnected()
+                }
             }
-            restartRecheck?.cancel()
-            restartRecheck = null
-            if (connected) controller.handleConnected() else controller.handleDisconnected()
         }
 
         private fun scheduleRestartRecheck() {
             if (restartRecheck != null) return
             val watched = peer ?: return
-            restartRecheck = launchGuarded {
+            restartRecheck = scope.launchGuarded {
                 delay(maxOf(0L, iceRestartGraceUntil - nowMs()))
-                if (!isCurrent || peer !== watched) return@launchGuarded
+                if (!isCurrent || peer !== watched || failed) return@launchGuarded
                 restartRecheck = null
                 if (nowMs() < iceRestartGraceUntil) {
                     scheduleRestartRecheck()
@@ -600,7 +604,7 @@ public class StreamSessionEngine(
                 if (watched.connectionState == PeerConnectionState.Connected) return@launchGuarded
                 log("ICE-restart grace expired")
                 controller.handleDisconnected()
-            }.also { timers += it }
+            }
         }
     }
 
@@ -621,6 +625,13 @@ internal fun decodeDataUri(dataUri: String): ByteArray {
 internal fun randomSessionId(): String {
     val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
     return buildString { repeat(24) { append(alphabet[Random.nextInt(alphabet.length)]) } }
+}
+
+// The engine's own serial context: its state is only touched from there.
+@OptIn(ExperimentalCoroutinesApi::class)
+private fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
+    val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
+    return base.limitedParallelism(1)
 }
 
 private fun monotonicMillis(): () -> Long {

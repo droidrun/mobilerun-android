@@ -11,6 +11,8 @@ import ai.mobilerun.stream.protocol.SignallingTiming
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -29,7 +31,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,6 +38,9 @@ private fun example(file: String, index: Int = 0): JsonObject =
     fixtureObject("signalling/$file.json").getValue("examples").jsonArray[index].jsonObject.getValue("json").jsonObject
 
 private val sessionId = example("client-keep-alive").getValue("sessionId").jsonPrimitive.content
+
+/** Runs [block] concurrently; its failure is delivered by `await().getOrThrow()` instead of cancelling the test. */
+private fun <T> TestScope.attempt(block: suspend () -> T) = async { runCatching { block() } }
 
 /** Drives a [StreamSessionEngine] against fake transports on the virtual clock of [scope]. */
 private class Harness(
@@ -48,13 +52,24 @@ private class Harness(
     var credentialCalls = 0
     var next: StreamCredentials? = first
 
+    /** Thrown by the provider once, then cleared. */
+    var nextError: Exception? = null
+
     /** While set, the provider suspends until it completes (a slow credentials request). */
     var gate: CompletableDeferred<Unit>? = null
     val log = mutableListOf<String>()
 
+    /** The scope the app hands to the engine; cancelling it must release everything, like close(). */
+    val host = CoroutineScope(scope.backgroundScope.coroutineContext + Job(scope.backgroundScope.coroutineContext[Job]))
+
     val engine = StreamSessionEngine(
-        scope = CoroutineScope(scope.backgroundScope.coroutineContext),
-        credentials = { credentialCalls += 1; gate?.await(); next },
+        scope = host,
+        credentials = {
+            credentialCalls += 1
+            gate?.await()
+            nextError?.let { nextError = null; throw it }
+            next
+        },
         signalling = signalling,
         peers = peers,
         random = { 0.5 },
@@ -202,17 +217,6 @@ class StreamSessionEngineTest {
     }
 
     @Test
-    fun handshakeTimingsComeFromTheFixture() {
-        val timing = fixtureObject("signalling/sequence.json").getValue("timing").jsonObject
-        fun ms(name: String) = timing.getValue(name).jsonPrimitive.long
-        assertEquals(ms("ws_open_timeout_ms"), SignallingTiming.WS_OPEN_TIMEOUT_MS)
-        assertEquals(ms("rtc_config_timeout_ms"), SignallingTiming.RTC_CONFIG_TIMEOUT_MS)
-        assertEquals(ms("keep_alive_interval_ms"), SignallingTiming.KEEP_ALIVE_INTERVAL_MS)
-        assertEquals(ms("ice_restart_grace_ms"), SignallingTiming.ICE_RESTART_GRACE_MS)
-        assertEquals(ms("screenshot_timeout_ms"), SignallingTiming.SCREENSHOT_TIMEOUT_MS)
-    }
-
-    @Test
     fun openUrlBeforeTheControlChannelOpensIsSentOnceItOpens() = runTest {
         val h = Harness(this)
         h.engine.openUrl("https://example.test/x")
@@ -338,6 +342,24 @@ class StreamSessionEngineTest {
         h.settle()
         assertEquals(StreamStatus.Connected, h.status)
         assertEquals(2, h.credentialCalls) // no further heal
+    }
+
+    @Test
+    fun webSocketClosingDuringNegotiationCannotBeCancelledByALaterConnected() = runTest {
+        val h = Harness(this)
+        h.negotiate()
+        val doomed = h.socket
+        doomed.serverCloses()
+        h.settle()
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+
+        // The peer connection of the doomed attempt still gets there before the backoff ends.
+        h.peer.emitState(PeerConnectionState.Connected)
+        h.settle()
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        h.advance(ReconnectPolicy.delayMs(1, 0.5))
+        assertEquals(2, h.signalling.sockets.size) // the rebuild still happened
+        assertTrue(doomed.isClosed)
     }
 
     @Test
@@ -490,12 +512,12 @@ class StreamSessionEngineTest {
         val h = Harness(this, first = null)
         h.engine.start()
         h.settle()
-        h.advance(4_000)
-        assertEquals(3, h.credentialCalls) // t = 0, 2 s, 4 s
+        h.advance(2 * CREDENTIALS_POLL_INTERVAL_MS)
+        assertEquals(3, h.credentialCalls) // t = 0, 1 and 2 intervals
         assertTrue(h.signalling.sockets.isEmpty())
         assertEquals(StreamStatus.Connecting, h.status)
         h.next = StreamCredentials("wss://stream.test/a", "token-a")
-        h.advance(2_000)
+        h.advance(CREDENTIALS_POLL_INTERVAL_MS)
         assertEquals(1, h.signalling.sockets.size)
         assertEquals(4, h.credentialCalls)
     }
@@ -670,13 +692,12 @@ class StreamSessionEngineTest {
     fun screenshotErrorFailsTheCall() = runTest {
         val h = Harness(this)
         h.connect()
-        val result = async { runCatching { h.engine.screenshot() } }
+        val result = attempt { h.engine.screenshot() }
         h.settle()
         val id = h.socket.framesOf("screenshot").single().json.getValue("id").jsonPrimitive.content
         h.socket.serverSends(JsonObject(example("server-screenshot-error") + ("id" to JsonPrimitive(id))).toString())
         h.settle()
-        val failure = assertNotNull(result.await().exceptionOrNull())
-        assertTrue(failure is ScreenshotFailedException)
+        val failure = assertFailsWith<ScreenshotFailedException> { result.await().getOrThrow() }
         assertEquals("capture failed", failure.message)
     }
 
@@ -684,12 +705,12 @@ class StreamSessionEngineTest {
     fun screenshotTimesOutAfterTheTimeout() = runTest {
         val h = Harness(this)
         h.connect()
-        val result = async { runCatching { h.engine.screenshot(30.seconds) } }
+        val result = attempt { h.engine.screenshot(30.seconds) }
         h.settle()
         h.advance(29_999)
         assertFalse(result.isCompleted)
         h.advance(1)
-        assertTrue(result.await().exceptionOrNull() is ScreenshotTimeoutException)
+        assertFailsWith<ScreenshotTimeoutException> { result.await().getOrThrow() }
         // A late reply for the forgotten id changes nothing.
         val id = h.socket.framesOf("screenshot").single().json.getValue("id").jsonPrimitive.content
         h.socket.serverSends(JsonObject(example("server-screenshot") + ("id" to JsonPrimitive(id))).toString())
@@ -701,12 +722,12 @@ class StreamSessionEngineTest {
     fun defaultScreenshotTimeoutIsThirtySeconds() = runTest {
         val h = Harness(this)
         h.connect()
-        val result = async { runCatching { h.engine.screenshot() } }
+        val result = attempt { h.engine.screenshot() }
         h.settle()
         h.advance(SignallingTiming.SCREENSHOT_TIMEOUT_MS - 1)
         assertFalse(result.isCompleted)
         h.advance(1)
-        assertTrue(result.await().exceptionOrNull() is ScreenshotTimeoutException)
+        assertFailsWith<ScreenshotTimeoutException> { result.await().getOrThrow() }
     }
 
     @Test
@@ -722,10 +743,10 @@ class StreamSessionEngineTest {
     fun pendingScreenshotFailsWhenTheConnectionIsReplaced() = runTest {
         val h = Harness(this)
         h.connect()
-        val result = async { runCatching { h.engine.screenshot() } }
+        val result = attempt { h.engine.screenshot() }
         h.settle()
         h.failAndWaitBackoff(1)
-        assertTrue(result.await().exceptionOrNull() is StreamDisconnectedException)
+        assertFailsWith<StreamDisconnectedException> { result.await().getOrThrow() }
     }
 
     // ---- sending ----
@@ -783,14 +804,15 @@ class StreamSessionEngineTest {
         val socket = h.socket
         val peer = h.peer
         val sentBefore = socket.sent.size
-        val pending = async { runCatching { h.engine.screenshot() } }
+        val pending = attempt { h.engine.screenshot() }
         h.settle()
 
         h.engine.close()
+        assertFalse(h.engine.sendControl(byteArrayOf(1))) // at once, before the teardown ran
+        h.settle()
         assertTrue(socket.isClosed)
         assertTrue(peer.isClosed)
-        assertFalse(h.engine.sendControl(byteArrayOf(1)))
-        assertTrue(pending.await().exceptionOrNull() is StreamDisconnectedException)
+        assertFailsWith<StreamDisconnectedException> { pending.await().getOrThrow() }
 
         h.advance(120_000)
         assertEquals(sentBefore + 1, socket.sent.size) // only the screenshot request, no keepAlive
@@ -799,6 +821,75 @@ class StreamSessionEngineTest {
         h.settle()
         assertEquals(1, h.signalling.sockets.size)
         h.engine.close() // idempotent
+    }
+
+    @Test
+    fun cancellingTheHostScopeReleasesEverythingLikeClose() = runTest {
+        val h = Harness(this)
+        h.connect()
+        val socket = h.socket
+        val peer = h.peer
+        val sentBefore = socket.sent.size
+        assertTrue(h.engine.sendControl(byteArrayOf(1)))
+
+        h.host.cancel() // no close()
+        assertFalse(h.engine.sendControl(byteArrayOf(2)))
+        assertFalse(h.engine.sendHover(byteArrayOf(3)))
+        h.settle()
+        assertTrue(socket.isClosed)
+        assertTrue(peer.isClosed)
+
+        h.advance(120_000)
+        assertEquals(sentBefore, socket.sent.size) // no keepAlive, no frame requests
+        assertEquals(1, h.signalling.sockets.size) // no reconnect
+    }
+
+    @Test
+    fun cancellingTheHostScopeStopsPendingBackoffAndCredentialPolling() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.socket.serverCloses()
+        h.settle()
+        h.host.cancel()
+        h.advance(120_000)
+        assertEquals(1, h.signalling.sockets.size)
+
+        val idle = Harness(this, first = null)
+        idle.engine.start()
+        idle.settle()
+        idle.host.cancel()
+        val calls = idle.credentialCalls
+        idle.advance(10 * CREDENTIALS_POLL_INTERVAL_MS)
+        assertEquals(calls, idle.credentialCalls)
+    }
+
+    @Test
+    fun closeWhileThePeerConnectionIsBeingCreatedClosesIt() = runTest {
+        val h = Harness(this)
+        h.engine.start()
+        h.settle()
+        h.socket.serverOpens()
+        h.settle()
+        // close() from another thread arrives while the factory is busy creating the peer connection.
+        h.peers.onCreate = { h.engine.close() }
+        h.socket.serverSends(example("server-rtc-configuration").toString())
+        h.settle()
+        assertEquals(1, h.peers.peers.size)
+        assertTrue(h.peer.isClosed)
+        assertTrue(h.socket.isClosed)
+        assertTrue(h.socket.framesOf("offer").isEmpty())
+    }
+
+    @Test
+    fun closeWhileTheSocketIsBeingOpenedClosesIt() = runTest {
+        val h = Harness(this)
+        h.signalling.onOpen = { h.engine.close() }
+        h.engine.start()
+        h.settle()
+        assertEquals(1, h.signalling.sockets.size)
+        assertTrue(h.socket.isClosed)
+        h.advance(120_000)
+        assertEquals(1, h.signalling.sockets.size)
     }
 
     @Test
@@ -823,26 +914,13 @@ class StreamSessionEngineTest {
 
     @Test
     fun aThrowingCredentialsProviderIsTreatedAsNotReady() = runTest {
-        var calls = 0
-        val signalling = FakeSignalling { currentTime }
-        val engine = StreamSessionEngine(
-            scope = CoroutineScope(backgroundScope.coroutineContext),
-            credentials = {
-                calls += 1
-                if (calls == 1) error("offline")
-                StreamCredentials("wss://stream.test/a", "t")
-            },
-            signalling = signalling,
-            peers = FakePeers(),
-            random = { 0.5 },
-            nowMs = { currentTime },
-        )
-        engine.start()
-        runCurrent()
-        assertTrue(signalling.sockets.isEmpty())
-        advanceTimeBy(2_000)
-        runCurrent()
-        assertEquals(1, signalling.sockets.size)
+        val h = Harness(this)
+        h.nextError = IllegalStateException("offline")
+        h.engine.start()
+        h.settle()
+        assertTrue(h.signalling.sockets.isEmpty())
+        h.advance(CREDENTIALS_POLL_INTERVAL_MS)
+        assertEquals(1, h.signalling.sockets.size)
     }
 
     @Test

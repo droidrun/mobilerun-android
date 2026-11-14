@@ -20,16 +20,17 @@ The headless core and the Android connection layer exist. There is no video view
 val session = DeviceStreamSession(
     context = applicationContext,
     credentials = { StreamCredentials(url = streamUrl, token = streamToken) }, // null = not ready yet
-    config = StreamConfig(),            // audio muted, codec order VP9/H.265/H.264, H.264-only without an H.265 decoder
     scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    config = StreamConfig(),            // audio muted, codec order VP9/H.265/H.264, H.264-only without an H.265 decoder
 )
 session.start()
 session.status       // StateFlow<StreamStatus>: Connecting, Connected, Reconnecting(attempt), Unavailable
-session.videoTrack   // StateFlow<VideoTrack?> for a renderer; changes on every reconnect
 session.videoSize    // StateFlow<VideoSize?>, including rotation
 session.sendControl(ControlMessages.touch(...))
-session.close()
+session.close()                     // or cancel the scope: both release everything
 ```
+
+The video track and EGL context for the renderer are internal for now; the video view of a later release uses them.
 
 The credentials provider is called at start, once per reconnect cycle and when the server rejects the token (HTTP 401/403). Closing the signalling socket ends the session on the server, so a closed socket is treated like a failed peer connection: the whole connection is rebuilt with the reconnect policy's backoff. All sessions in a process share one libwebrtc factory, which lives until the process ends; `close()` releases a session's own peer connection, channels and tracks. Playout-delay hints are not available in the WebRTC Android API, so the jitter buffer keeps its adaptive default.
 

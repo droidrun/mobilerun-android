@@ -62,8 +62,14 @@ internal class FakeSocket(
 internal class FakeSignalling(private val clock: () -> Long) : SignallingTransportFactory {
     val sockets = mutableListOf<FakeSocket>()
 
+    /** Runs while a socket is being opened, before [open] returns. */
+    var onOpen: (() -> Unit)? = null
+
     override fun open(credentials: StreamCredentials, listener: SignallingListener): SignallingTransport =
-        FakeSocket(credentials, listener, clock).also { sockets += it }
+        FakeSocket(credentials, listener, clock).also {
+            sockets += it
+            onOpen?.invoke()
+        }
 }
 
 internal class FakePeer(
@@ -138,12 +144,18 @@ internal class FakePeers : PeerTransportFactory {
     val peers = mutableListOf<FakePeer>()
     var createError: Exception? = null
 
+    /** Runs while a peer connection is being created, before [create] returns. */
+    var onCreate: (() -> Unit)? = null
+
     override fun create(
         configuration: PeerConfiguration,
         channels: List<DataChannelSpec>,
         listener: PeerListener,
     ): PeerTransport {
         createError?.let { throw it }
-        return FakePeer(configuration, channels, listener).also { peers += it }
+        return FakePeer(configuration, channels, listener).also {
+            peers += it
+            onCreate?.invoke()
+        }
     }
 }

@@ -6,6 +6,7 @@ package ai.mobilerun.stream.core
 import kotlin.random.Random
 
 /** Where a stream is in its connect and recovery cycle. */
+@InternalStreamApi
 public enum class StreamReconnectStatus {
     /** A fresh attempt is negotiating. */
     Connecting,
@@ -29,6 +30,7 @@ public enum class StreamReconnectStatus {
  *
  * Fields are never added to this constructor; a new field gets a new type.
  */
+@InternalStreamApi
 public data class StreamReconnectSnapshot(val status: StreamReconnectStatus, val attempt: Int)
 
 /** A timer returned by [ReconnectScheduler.schedule]. */
@@ -74,6 +76,7 @@ public fun interface ReconnectScheduler {
  * @param scheduler time source.
  * @param random jitter source returning a value in `[0, 1)`.
  */
+@InternalStreamApi
 public class StreamReconnectController(
     private val onRemount: () -> Unit,
     private val onSnapshot: (StreamReconnectSnapshot) -> Unit,

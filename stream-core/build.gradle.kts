@@ -3,6 +3,10 @@ plugins {
 }
 
 kotlin {
+    compilerOptions {
+        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+    }
+
     sourceSets {
         commonMain.dependencies {
             // The transport interfaces and the session expose protocol types.

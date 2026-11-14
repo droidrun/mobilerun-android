@@ -28,14 +28,16 @@ android {
 kotlin {
     explicitApi()
     jvmToolchain(17)
-    compilerOptions { allWarningsAsErrors.set(true) }
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+    }
 }
 
 dependencies {
     api(project(":protocol"))
     api(project(":stream-core"))
-    // The video track is part of the public API.
-    api(libs.webrtc)
+    implementation(libs.webrtc)
     // The OkHttpClient is part of StreamConfig.
     api(libs.okhttp)
 

@@ -28,7 +28,7 @@ internal class StreamMedia(initialMuted: Boolean) {
 
     private val sizeSink = VideoSink { frame: VideoFrame ->
         val next = VideoSize(frame.buffer.width, frame.buffer.height, frame.rotation)
-        if (size.value != next) size.value = next
+        size.value = next
     }
 
     fun attachVideo(video: VideoTrack) {

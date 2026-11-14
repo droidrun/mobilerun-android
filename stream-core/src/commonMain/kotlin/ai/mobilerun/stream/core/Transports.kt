@@ -10,6 +10,7 @@ import ai.mobilerun.stream.protocol.IceServer
  * The signalling WebSocket of one connection attempt. Implementations deliver their events to the
  * [SignallingListener] they were opened with, on any thread, and never after [close].
  */
+@InternalStreamApi
 public interface SignallingTransport {
     /** Sends one text frame. Returns `false` if the socket is not open (the frame is dropped). */
     public fun send(text: String): Boolean
@@ -19,6 +20,7 @@ public interface SignallingTransport {
 }
 
 /** Events of a [SignallingTransport]. May be called from any thread. */
+@InternalStreamApi
 public interface SignallingListener {
     /** The socket is open. */
     public fun onOpen()
@@ -39,6 +41,7 @@ public interface SignallingListener {
 }
 
 /** Opens signalling sockets. */
+@InternalStreamApi
 public fun interface SignallingTransportFactory {
     /**
      * Starts opening a socket to [credentials]; the result is reported through [listener].
@@ -48,6 +51,7 @@ public fun interface SignallingTransportFactory {
 }
 
 /** State of a peer connection (same values as the WebRTC `connectionState`). */
+@InternalStreamApi
 public enum class PeerConnectionState { New, Connecting, Connected, Disconnected, Failed, Closed }
 
 /**
@@ -56,9 +60,11 @@ public enum class PeerConnectionState { New, Connecting, Connected, Disconnected
  * @property iceServers the ICE servers.
  * @property iceTransportPolicy `all` or `relay`, or `null` for the default.
  */
+@InternalStreamApi
 public class PeerConfiguration(public val iceServers: List<IceServer>, public val iceTransportPolicy: String?)
 
 /** Events of a [PeerTransport]. May be called from any thread. */
+@InternalStreamApi
 public interface PeerListener {
     /** A local ICE candidate was gathered. The end-of-candidates event is not reported. */
     public fun onLocalCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int?)
@@ -74,6 +80,7 @@ public interface PeerListener {
  * One peer connection with recvonly audio and video and the negotiated data channels. Created by a
  * [PeerTransportFactory]; all its events go to the [PeerListener] it was created with.
  */
+@InternalStreamApi
 public interface PeerTransport {
     /** The current connection state. */
     public val connectionState: PeerConnectionState
@@ -101,6 +108,7 @@ public interface PeerTransport {
 }
 
 /** Creates peer connections. */
+@InternalStreamApi
 public fun interface PeerTransportFactory {
     /**
      * Creates a peer connection from [configuration] with recvonly audio and video transceivers and

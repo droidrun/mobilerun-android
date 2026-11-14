@@ -3,7 +3,12 @@
 
 package ai.mobilerun.stream.core
 
-/** What the user of a stream should see: the connection status of one device stream. */
+/**
+ * What the user of a stream should see: the connection status of one device stream.
+ *
+ * Equality is hand-written and there are no data classes: public session types must be able to gain
+ * fields without breaking callers.
+ */
 public sealed interface StreamStatus {
     /** A fresh attempt is negotiating, or the session waits for credentials. */
     public data object Connecting : StreamStatus
@@ -14,7 +19,8 @@ public sealed interface StreamStatus {
     /**
      * The connection dropped or an attempt failed; the session waits out the backoff or retries.
      *
-     * @property attempt 1-based number of the upcoming (or in-flight) reconnect attempt.
+     * @property attempt 1-based number of the upcoming (or in-flight) reconnect attempt; 0 right after
+     *   a manual `retry()` started a fresh cycle.
      */
     public class Reconnecting(public val attempt: Int) : StreamStatus {
         override fun equals(other: Any?): Boolean = other is Reconnecting && other.attempt == attempt

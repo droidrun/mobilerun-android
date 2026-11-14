@@ -128,7 +128,7 @@ class OkHttpSignallingTest {
         upgrade()
         val transport = open(credentials())
         assertEquals("open", next(events))
-        transport.cancelAbruptly()
+        transport.socket.cancel()
         assertEquals("failure:null", next(events))
     }
 

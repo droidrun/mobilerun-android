@@ -51,11 +51,6 @@ internal class OkHttpSignallingTransport(private val listener: SignallingListene
         socket.close(NORMAL_CLOSURE, null)
     }
 
-    /** Drops the connection without a close frame, like a network failure. */
-    fun cancelAbruptly() {
-        socket.cancel()
-    }
-
     override fun onOpen(webSocket: WebSocket, response: Response) {
         socket = webSocket
         if (!finished) listener.onOpen()

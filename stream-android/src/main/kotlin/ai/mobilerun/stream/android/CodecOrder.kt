@@ -4,16 +4,18 @@
 package ai.mobilerun.stream.android
 
 internal object CodecOrder {
-    private fun String.isH265() = contains("h265", ignoreCase = true) || contains("hevc", ignoreCase = true)
+    // MIME subtype of an RTP codec entry such as "video/H264".
+    private fun String.subtype() = substringAfter('/').lowercase()
 
-    private fun String.isH264() = contains("h264", ignoreCase = true) || contains("avc", ignoreCase = true)
+    private fun String.isH265() = subtype() in setOf("h265", "hevc")
 
-    private fun String.isVp9() = contains("vp9", ignoreCase = true)
+    private fun String.isH264() = subtype() in setOf("h264", "avc")
+
+    private fun String.isVp9() = subtype() == "vp9"
 
     // Retransmission and redundancy entries carry no picture; they accompany whichever codecs stay.
     private fun String.isAuxiliary() =
-        contains("rtx", ignoreCase = true) || contains("red", ignoreCase = true) ||
-            contains("ulpfec", ignoreCase = true) || contains("flexfec", ignoreCase = true)
+        subtype() in setOf("rtx", "red", "ulpfec") || subtype().startsWith("flexfec")
 
     /**
      * The receiver codec preference list, or `null` if nothing sensible can be set (the defaults then stay).

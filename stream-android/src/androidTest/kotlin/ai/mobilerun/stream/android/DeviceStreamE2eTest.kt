@@ -11,6 +11,7 @@ import ai.mobilerun.stream.core.StreamStatus
 import ai.mobilerun.stream.core.VideoSize
 import ai.mobilerun.stream.protocol.AMotionEvent
 import ai.mobilerun.stream.protocol.ControlMessages
+import ai.mobilerun.stream.protocol.SignallingTiming
 import android.os.SystemClock
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
@@ -38,6 +39,7 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -59,22 +61,39 @@ class DeviceStreamE2eTest {
     private lateinit var tap: TappingSignalling
     private lateinit var session: DeviceStreamSession
 
+    /** Wraps the real signalling: records the offers and answers and lets the test inject server frames. */
     private class TappingSignalling(private val inner: SignallingTransportFactory) : SignallingTransportFactory {
-        val transports = CopyOnWriteArrayList<SignallingTransport>()
+        val transports = CopyOnWriteArrayList<OkHttpSignallingTransport>()
         val configurations = CopyOnWriteArrayList<String>()
+        val sentOffers = CopyOnWriteArrayList<String>()
+        val receivedAnswers = CopyOnWriteArrayList<String>()
         @Volatile var listener: SignallingListener? = null
 
         override fun open(credentials: StreamCredentials, listener: SignallingListener): SignallingTransport {
             val spy = object : SignallingListener by listener {
                 override fun onMessage(text: String) {
-                    if (text.contains("\"rtcConfiguration\"")) configurations += text
+                    val type = runCatching { JSONObject(text).optString("type") }.getOrDefault("")
+                    if (type == "rtcConfiguration") configurations += text
+                    if (type == "answer") receivedAnswers += JSONObject(text).getString("sdp")
                     listener.onMessage(text)
                 }
             }
             this.listener = spy
-            return inner.open(credentials, spy).also { transports += it }
+            val real = inner.open(credentials, spy) as OkHttpSignallingTransport
+            transports += real
+            return object : SignallingTransport by real {
+                override fun send(text: String): Boolean {
+                    if (runCatching { JSONObject(text).optString("type") }.getOrDefault("") == "offer") {
+                        sentOffers += JSONObject(text).getString("sdp")
+                    }
+                    return real.send(text)
+                }
+            }
         }
     }
+
+    private fun iceUfrag(sdp: String): String =
+        Regex("a=ice-ufrag:(\\S+)").find(sdp)?.groupValues?.get(1) ?: error("no ice-ufrag in SDP")
 
     @Before
     fun setUp() {
@@ -163,13 +182,13 @@ class DeviceStreamE2eTest {
         delay(3_000)
         val after = session.screenshot()
         shot("2-after-tap", after)
-        assertTrue(!before.contentEquals(after), "the tap changed the device screen")
+        assertFalse(before.contentEquals(after), "the tap changed the device screen")
 
         // 3. Forced WebSocket close: full rebuild, video again.
         val socketsBefore = tap.transports.size
         val statuses = CopyOnWriteArrayList<StreamStatus>()
         val watcher = scope.launchStatuses(statuses)
-        (tap.transports.last() as OkHttpSignallingTransport).cancelAbruptly()
+        tap.transports.last().socket.cancel()
         withTimeout(30.seconds) { session.status.first { it is StreamStatus.Reconnecting } }
         awaitConnectedWithVideo()
         assertTrue(tap.transports.size > socketsBefore, "a new socket was opened")
@@ -181,11 +200,26 @@ class DeviceStreamE2eTest {
         delay(2_000)
         shot("3-after-reconnect", session.screenshot())
 
-        // 4. Mid-session credential refresh: replay the configuration the server sent as a refresh.
-        val configuration = tap.configurations.first()
+        // 4. Mid-session credential refresh. The server pushed none, so the configuration it sent
+        // at the start is replayed as if it were a refresh. Proof: an ICE-restart offer goes out, the
+        // server answers it, and both carry a new ICE ufrag; the stream is not rebuilt.
+        val initialOffer = tap.sentOffers.last()
+        val initialAnswer = tap.receivedAnswers.last()
+        val offersBefore = tap.sentOffers.size
+        val answersBefore = tap.receivedAnswers.size
         val connectedSockets = tap.transports.size
-        tap.listener!!.onMessage(configuration)
-        delay(10_000)
+        tap.listener!!.onMessage(tap.configurations.first())
+        withTimeout(30.seconds) {
+            while (tap.sentOffers.size <= offersBefore || tap.receivedAnswers.size <= answersBefore) delay(100)
+        }
+        val restartOffer = tap.sentOffers.last()
+        val restartAnswer = tap.receivedAnswers.last()
+        Log.i(TAG, "ice ufrag offer ${iceUfrag(initialOffer)} -> ${iceUfrag(restartOffer)}, " +
+            "answer ${iceUfrag(initialAnswer)} -> ${iceUfrag(restartAnswer)}")
+        assertNotEquals(iceUfrag(initialOffer), iceUfrag(restartOffer), "the restart offer has a new ICE generation")
+        assertNotEquals(iceUfrag(initialAnswer), iceUfrag(restartAnswer), "the answer belongs to the new ICE generation")
+        // Wait out the 15 s grace window: the stream must still be up afterwards.
+        delay(SignallingTiming.ICE_RESTART_GRACE_MS + 5_000)
         assertEquals(StreamStatus.Connected, session.status.value, "stream stays up through the refresh")
         assertEquals(connectedSockets, tap.transports.size, "no rebuild happened")
         assertTrue(framesGrow(counter), "video continues after the ICE restart")

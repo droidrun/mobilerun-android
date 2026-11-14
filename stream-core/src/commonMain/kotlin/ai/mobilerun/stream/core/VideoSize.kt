@@ -4,7 +4,8 @@
 package ai.mobilerun.stream.core
 
 /**
- * Geometry of the received video.
+ * Geometry of the received video. Equality is hand-written and this is no data class: public
+ * session types must be able to gain fields without breaking callers.
  *
  * @property width width of the decoded frame in pixels, before [rotation] is applied.
  * @property height height of the decoded frame in pixels, before [rotation] is applied.

@@ -3,23 +3,21 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentialsProvider
 import ai.mobilerun.stream.core.StreamSessionEngine
 import ai.mobilerun.stream.core.StreamStatus
 import ai.mobilerun.stream.core.VideoSize
+import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
-import kotlin.coroutines.ContinuationInterceptor
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * A live stream session to one Mobilerun cloud device: signalling WebSocket plus WebRTC, with the
@@ -28,15 +26,14 @@ import kotlin.time.Duration.Companion.seconds
  * The session connects on [start], reports its progress in [status], exposes the received video as
  * [videoTrack] for a renderer, and sends input as raw control messages ([sendControl],
  * [sendHover]). When the connection drops it rebuilds itself with exponential backoff and asks the
- * [credentials] provider for fresh credentials; after six failed attempts it reports
+ * [credentials] provider for fresh credentials; after [ReconnectPolicy.MAX_ATTEMPTS] failed attempts it reports
  * [StreamStatus.Unavailable] until [retry] is called. It has no Android lifecycle coupling: the
  * app decides when to [start] and [close].
  *
- * **Threading.** Pass a [scope] on a background dispatcher (for example `Dispatchers.Default`). The
- * session runs its work one step at a time on that scope's dispatcher (made serial with
- * `limitedParallelism(1)`); the connection setup is a few milliseconds of native calls that should
- * not run on the main thread. All members may be called from any thread. The session ends when
- * [close] is called or [scope] is cancelled.
+ * **Threading.** Pass a [scope] on a background dispatcher (for example `Dispatchers.Default`): the
+ * connection setup is a few milliseconds of native calls that should not run on the main thread.
+ * All members may be called from any thread. The session ends, releasing everything on its own
+ * serial context, when [close] is called or [scope] is cancelled.
  *
  * **Process-wide WebRTC state.** All sessions share one libwebrtc `PeerConnectionFactory` and one
  * `EglBase`, created on first use and kept for the life of the process. [close] releases a session's
@@ -50,28 +47,28 @@ import kotlin.time.Duration.Companion.seconds
 public class DeviceStreamSession internal constructor(
     context: Context,
     credentials: StreamCredentialsProvider,
-    private val config: StreamConfig,
     scope: CoroutineScope,
+    config: StreamConfig,
     signalling: SignallingTransportFactory,
 ) {
     /** Creates a session; nothing happens until [start]. */
     public constructor(
         context: Context,
         credentials: StreamCredentialsProvider,
-        config: StreamConfig = StreamConfig(),
         scope: CoroutineScope,
+        config: StreamConfig = StreamConfig(),
     ) : this(
         context,
         credentials,
-        config,
         scope,
+        config,
         OkHttpSignallingTransportFactory(config.httpClient ?: defaultHttpClient),
     )
 
     private val appContext = context.applicationContext
     private val media = StreamMedia(config.muted)
     private val engine = StreamSessionEngine(
-        scope = serial(scope),
+        scope = scope,
         credentials = credentials,
         signalling = signalling,
         peers = WebRtcPeerTransportFactory({ WebRtcRuntime.factory(appContext) }, media, config.videoCodec),
@@ -89,10 +86,10 @@ public class DeviceStreamSession internal constructor(
      * reconnect and must not be used after it was replaced: collect this flow and attach or detach
      * your renderer on each change.
      */
-    public val videoTrack: StateFlow<VideoTrack?> get() = media.videoTrack
+    internal val videoTrack: StateFlow<VideoTrack?> get() = media.videoTrack
 
     /** The EGL context that renderers must be initialised with to show [videoTrack] without copies. */
-    public val eglBaseContext: EglBase.Context get() = WebRtcRuntime.eglBase.eglBaseContext
+    internal val eglBaseContext: EglBase.Context get() = WebRtcRuntime.eglBase.eglBaseContext
 
     /** Starts connecting. Does nothing if already started or closed. */
     public fun start() {
@@ -131,19 +128,15 @@ public class DeviceStreamSession internal constructor(
      *
      * @return the image bytes, normally PNG.
      * @throws ai.mobilerun.stream.core.StreamNotConnectedException if the signalling socket is not open.
+     * @throws ai.mobilerun.stream.core.StreamDisconnectedException if the connection ended while waiting.
      * @throws ai.mobilerun.stream.core.ScreenshotFailedException if the device could not take it.
      * @throws ai.mobilerun.stream.core.ScreenshotTimeoutException if no reply arrived within [timeout].
      */
-    public suspend fun screenshot(timeout: Duration = 30.seconds): ByteArray = engine.screenshot(timeout)
+    public suspend fun screenshot(
+        timeout: Duration = SignallingTiming.SCREENSHOT_TIMEOUT_MS.milliseconds,
+    ): ByteArray = engine.screenshot(timeout)
 
     private companion object {
         val defaultHttpClient: OkHttpClient by lazy { OkHttpClient() }
-
-        // The engine needs a dispatcher that runs one coroutine at a time.
-        @OptIn(ExperimentalCoroutinesApi::class)
-        fun serial(scope: CoroutineScope): CoroutineScope {
-            val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
-            return CoroutineScope(scope.coroutineContext + base.limitedParallelism(1))
-        }
     }
 }
