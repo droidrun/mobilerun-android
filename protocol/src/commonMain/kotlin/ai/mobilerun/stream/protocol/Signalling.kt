@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
 
 internal val SignallingJson: Json = Json {
@@ -168,6 +169,10 @@ public sealed interface ServerMessage {
     public class RtcConfiguration internal constructor(
         @SerialName("rtcConfiguration") public val configuration: JsonObject? = null,
     ) : ServerMessage {
+        /** The `iceTransportPolicy` of [configuration] (`all` or `relay`), or `null` if absent. */
+        public val iceTransportPolicy: String?
+            get() = (configuration?.get("iceTransportPolicy") as? JsonPrimitive)?.takeIf { it.isString }?.content
+
         /**
          * The ICE servers in [configuration], or `null` if there are none or they are malformed.
          * A refresh without ICE servers must be ignored; an empty list is a valid refresh.

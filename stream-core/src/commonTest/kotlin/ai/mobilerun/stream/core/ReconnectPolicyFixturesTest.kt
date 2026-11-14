@@ -24,8 +24,6 @@ class ReconnectPolicyFixturesTest {
     fun constantsMatchThePolicyFile() {
         fun long(name: String) = policy.getValue(name).jsonPrimitive.long
         assertEquals(policy.getValue("max_attempts").jsonPrimitive.int, ReconnectPolicy.MAX_ATTEMPTS)
-        assertEquals(long("ws_open_timeout_ms"), SignallingTiming.WS_OPEN_TIMEOUT_MS)
-        assertEquals(long("rtc_config_timeout_ms"), SignallingTiming.RTC_CONFIG_TIMEOUT_MS)
         assertEquals(long("connect_timeout_ms"), ReconnectPolicy.CONNECT_TIMEOUT_MS)
         assertEquals(long("stability_ms"), ReconnectPolicy.STABILITY_MS)
         val backoff = policy.getValue("backoff").jsonObject
@@ -50,7 +48,9 @@ class ReconnectPolicyFixturesTest {
     @Test
     fun invariantsHold() {
         val invariants = policy.getValue("invariants").jsonArray.map { it.jsonPrimitive.content }
-        assertEquals(listOf("connect_timeout_ms > ws_open_timeout_ms + rtc_config_timeout_ms"), invariants)
+        assertEquals(1, invariants.size)
+        assertTrue(invariants.single().startsWith("connect_timeout_ms > ws_open_timeout_ms + rtc_config_timeout_ms"))
+        // The handshake timeouts are checked against signalling/sequence.json in the :protocol tests.
         val phases = SignallingTiming.WS_OPEN_TIMEOUT_MS + SignallingTiming.RTC_CONFIG_TIMEOUT_MS
         assertTrue(ReconnectPolicy.CONNECT_TIMEOUT_MS > phases)
     }

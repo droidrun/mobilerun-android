@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.android.library) apply false
 }
 
 val conformanceDir = layout.projectDirectory.dir("conformance")
@@ -21,6 +22,7 @@ subprojects {
                 kotlin.srcDir(conformanceDir.dir("testkit/common"))
                 dependencies {
                     implementation(kotlin("test"))
+                    implementation(libs.kotlinx.coroutines.test)
                     implementation(libs.kotlinx.serialization.json)
                 }
             }

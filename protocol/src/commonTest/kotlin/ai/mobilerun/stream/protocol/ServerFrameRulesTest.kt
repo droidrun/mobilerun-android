@@ -32,6 +32,15 @@ class ServerFrameRulesTest {
     }
 
     @Test
+    fun iceTransportPolicyIsReadWhenItIsAString() {
+        fun policy(json: String) =
+            rtcConfiguration("""{"type":"rtcConfiguration","rtcConfiguration":$json}""", established).iceTransportPolicy
+        assertEquals("relay", policy("""{"iceTransportPolicy":"relay","iceServers":[]}"""))
+        assertNull(policy("""{"iceServers":[]}"""))
+        assertNull(policy("""{"iceTransportPolicy":1}"""))
+    }
+
+    @Test
     fun theFixtureListsTheThreeIgnoreRules() {
         assertEquals(3, fixtureObject("signalling/sequence.json").getValue("ignored").jsonArray.size)
     }
