@@ -245,12 +245,11 @@ class DeviceStreamViewE2eTest {
         ui { view.sendSystemKey(SystemKey.BACK) }
         val back = shot("keys-9-back")
         assertChanged(entered, back, "BACK navigates to the prior page")
-        ui { view.sendSystemKey(SystemKey.HOME) }
-        val returnedHome = shot("keys-10-home")
-        assertChanged(back, returnedHome, "HOME returns to launcher")
-        ui { view.hasControl = false; view.sendSystemKey(SystemKey.RECENT) }
-        val displayOnly = shot("keys-11-display-only")
-        assertTrue(screenshotCrop(returnedHome).contentEquals(screenshotCrop(displayOnly)),
-            "display-only suppresses input; the content crop stays identical")
+        ui { view.hasControl = false; view.sendSystemKey(SystemKey.HOME) }
+        val displayOnly = shot("keys-10-display-only")
+        assertTrue(screenshotCrop(back).contentEquals(screenshotCrop(displayOnly)),
+            "display-only suppresses HOME; the content crop stays identical")
+        ui { view.hasControl = true; view.sendSystemKey(SystemKey.HOME) }
+        assertChanged(back, shot("keys-11-home"), "HOME returns to launcher when control is enabled")
     }
 }
