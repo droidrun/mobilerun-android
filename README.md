@@ -44,12 +44,49 @@ val session = DeviceStreamSession(
 session.start()
 session.status       // StateFlow<StreamStatus>: Connecting, Connected, Reconnecting(attempt), Unavailable
 session.videoSize    // StateFlow<VideoSize?>, including rotation
+session.stats        // StateFlow<StreamStats?>, one-second inbound video samples
 session.close()                     // or cancel the scope: both release everything
 ```
 
 The video track and EGL context stay internal; `DeviceStreamView` uses them to render without copies.
 
 The credentials provider is called at start, once per reconnect cycle and when the server rejects the token (HTTP 401/403). Closing the signalling socket ends the session on the server, so a closed socket is treated like a failed peer connection: the whole connection is rebuilt with the reconnect policy's backoff. All sessions in a process share one libwebrtc factory, which lives until the process ends; `close()` releases a session's own peer connection, channels and tracks. Playout-delay hints are not available in the WebRTC Android API, so the jitter buffer keeps its adaptive default.
+
+## Stream statistics and benchmark
+
+`session.stats` is read-only and `null` while disconnected or after close. Collect it like the
+status flow. Every connected second it reports inbound video fps, decoded dimensions, codec MIME
+type, payload bitrate in kbit/s, selected-pair RTT in ms, jitter-buffer delay per emitted frame,
+packet loss, dropped frames, freezes, decode time per frame, local/remote ICE candidate types, and
+time from the connection attempt to its first decoded frame. Missing platform fields remain null.
+Bitrate and per-frame durations need two reports; each new attempt resets the counter baseline.
+RTT uses the transport's selected candidate pair, rather than an arbitrary nominated pair.
+
+The instrumentation-only benchmark opens five connections and takes ten input-latency samples per
+connection. Supply a running emulator (`ANDROID_SERIAL`) or `BENCHMARK_AVD`, plus runtime credentials
+and an output directory outside the repository:
+
+```sh
+STREAM_E2E_CREDENTIALS="$RUNTIME_CREDENTIALS" STREAM_BENCHMARK_OUT="$BENCHMARK_OUTPUT" \
+  TAP_X=200 TAP_Y=600 tool/benchmark
+```
+
+`TAP_X/Y` are upright video pixels selecting an existing harmless launcher app icon. Each sample
+returns Home, waits for a stable region, taps that icon and records the first changed rendered
+frame. Choose `BENCHMARK_REGION=left,top,width,height` in normalized picture coordinates to exclude
+animated widgets and system bars (default `0.15,0.15,0.7,0.7`). A quarter-scale renderer callback
+detects a mean-luma change of at least 4/255. This measures tap DOWN to rendered-frame callback;
+it excludes physical display scanout. Failed stability/change checks fail the benchmark instead of
+inventing a latency. `BENCHMARK_RUNS` and `BENCHMARK_SAMPLES` override the defaults. The output contains
+raw samples in `benchmark.json` and a `benchmark-results.md` table (median and nearest-rank p90).
+Credentials are copied only to the test app's private storage at run time and removed afterward.
+
+The separate `StreamHardeningTest` uses the same runner and credentials. It exercises host visibility,
+network loss/restoration, a ten-minute soak (PSS growth bounded by the larger of 32 MiB or 25% of the
+warmed baseline), native-peer teardown and session collection. Run it with
+`STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.StreamHardeningTest scripts/run-e2e.sh stream-android`.
+It restores emulator networking even after failure. A rejected initial device login leaves live
+measurement pending; it is not a successful benchmark or soak result.
 
 ## Video and input
 
@@ -88,9 +125,11 @@ per frame and releases at the last position inside the video. Mouse drags use po
 uses only the hover channel. Wheel axes use Android's tick units, without the browser pixel scaling.
 Hardware single-character keys inject text (including control characters, matching React); navigation, modifier and Ctrl/Command combinations inject
 Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shift for letters. Ctrl/Command+V pastes the local primary clipboard;
-Ctrl/Command+M presses Menu. Mapped fallback keys without single-character text send DOWN on keydown and UP on keyup.
+Ctrl/Command+M presses Menu. Single graphemes, including emoji and combining sequences, inject their produced text without normalization.
+Keycode DOWNs track physical identity; only matched keyups send UP, using current modifiers. Text
+and completed paste/menu shortcuts never produce orphan releases.
 The IME uses a normal text keyboard with suggestions/autocorrect disabled and the no-personalized-learning hint on Android 8+. If an IME composes anyway, composition
-stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed newline and tab become ENTER/TAB; other
+stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and tab become ENTER/TAB; other
 committed control characters are dropped. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
 
@@ -230,7 +269,8 @@ session.start()
 ```
 
 The callback returns `StreamCredentials?`; null means not ready. The engine polls every 3 seconds,
-including after fetch failures, and refetches on recovery/heal. Cancellation stops polling. No API
+including after fetch failures, and refetches on recovery/heal. Each provider call is bounded by the reconnect connect timeout (45 seconds); a hung call cannot
+block wake/retry work, and a timed-out initial call is polled again. Cancellation stops polling. No API
 key belongs in the app: stream tokens are short-lived backend-issued values.
 
 All overlay slots have a `BoxScope` receiver for placement. The navigation slot receives one
@@ -252,7 +292,8 @@ content or text-field crops that exclude the status bar. `STREAM_E2E_OUT` receiv
 local-renderer screenshots and logs. Runtime target selection belongs outside the test.
 
 
-The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states.
+The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
+replay through the same pure keyboard, IME, pointer, geometry and scroll logic used by Android.
 
 `scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default
 UI. The credential-free `DefaultUiGalleryTest` separately captures
@@ -278,7 +319,7 @@ The CI job runs unit tests and lint for all modules; the emulator test is not pa
 `conformance/fixtures` is a vendored copy of the `fixtures/` directory of `mobilerun-sdk-conformance` at the tag in `conformance/VERSION`. To move to another tag, run the sync script with a local clone of that repository; it also regenerates the constants:
 
 ```sh
-tool/sync-conformance.sh v0.1.1 /path/to/mobilerun-sdk-conformance
+tool/sync-conformance.sh v0.2.0 /path/to/mobilerun-sdk-conformance
 ```
 
 `protocol/src/commonMain/kotlin/ai/mobilerun/stream/protocol/Constants.kt` is generated from `conformance/fixtures/constants.json` by `tool/generate-constants.py` (Python 3, standard library only). CI fails if the committed file is out of date.

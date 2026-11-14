@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.ControlMessages
 import kotlin.math.min
 
 /** Aspect-fit geometry in view coordinates, using the upright video dimensions. */
@@ -23,6 +24,18 @@ public class InputGeometry private constructor(
             relativeX > width || relativeY > height
         ) return null
         return InputPoint(relativeX / width * videoWidth, relativeY / height * videoHeight)
+    }
+
+    /** Encodes abstract left/up wheel ticks only inside the upright picture. */
+    public fun scroll(x: Double, y: Double, h: Double, v: Double, buttons: Int): ByteArray? {
+        val point = map(x, y) ?: return null
+        return ControlMessages.scroll(videoWidth, videoHeight, point.x, point.y, h, v, buttons)
+    }
+
+    /** Encodes mouse movement without an active mouse gesture for the hover channel. */
+    public fun hover(x: Double, y: Double, buttons: Int): ByteArray? {
+        val point = map(x, y) ?: return null
+        return ControlMessages.hover(videoWidth, videoHeight, point.x, point.y, buttons)
     }
 
     @InternalStreamApi

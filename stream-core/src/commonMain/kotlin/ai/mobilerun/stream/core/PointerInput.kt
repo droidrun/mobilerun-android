@@ -16,8 +16,8 @@ public class PointerInput(private val send: (ByteArray) -> Unit) {
     private val active = mutableMapOf<Int, Pointer>()
 
     /** Allocates the lowest free slot in 0..9; the mouse always uses -1. */
-    public fun down(id: Int, x: Double, y: Double, geometry: InputGeometry): Boolean {
-        if (id in active) return false
+    public fun down(id: Int, x: Double, y: Double, geometry: InputGeometry, button: Int = 0): Boolean {
+        if (button != 0 || id in active) return false
         val point = geometry.map(x, y) ?: return false
         val slot = if (id == MOUSE_ID) {
             MOUSE_ID.toLong()
@@ -48,7 +48,12 @@ public class PointerInput(private val send: (ByteArray) -> Unit) {
     }
 
     /** Releases at the latest in-video point, including movement waiting for the next frame. */
-    public fun up(id: Int): Unit = release(id, AMotionEvent.ACTION_UP)
+    public fun up(id: Int, button: Int = 0) {
+        if (button == 0) release(id, AMotionEvent.ACTION_UP)
+    }
+
+    /** Whether this identity has an active gesture, independent of other touch or mouse slots. */
+    public fun isActive(id: Int): Boolean = id in active
 
     /** Cancels one pointer, including a platform-cancelled POINTER_UP. */
     public fun cancel(id: Int): Unit = release(id, AMotionEvent.ACTION_CANCEL)

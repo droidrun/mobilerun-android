@@ -49,9 +49,16 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.serialization.json)
 
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+tasks.withType<Test>().configureEach {
+    val fixtures = rootProject.layout.projectDirectory.dir("conformance/fixtures")
+    inputs.dir(fixtures)
+    systemProperty("conformance.fixtures", fixtures.asFile.absolutePath)
 }

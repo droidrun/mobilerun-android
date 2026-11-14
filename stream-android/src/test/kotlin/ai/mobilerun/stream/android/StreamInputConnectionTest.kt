@@ -116,7 +116,9 @@ class StreamInputConnectionTest {
             ControlMessages.keycode(0, 61), ControlMessages.keycode(1, 61),
             ControlMessages.text("b"),
             ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
-            ControlMessages.text("cd"),
+            ControlMessages.text("c"),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+            ControlMessages.text("d"),
         )
     }
 

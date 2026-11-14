@@ -12,6 +12,12 @@ import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
 import ai.mobilerun.stream.protocol.IceServer
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.webrtc.RTCStatsReport
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -62,8 +68,37 @@ internal class WebRtcPeerTransport(
     @Volatile private var closed = false
     @Volatile private var videoTrack: VideoTrack? = null
     @Volatile private var audioTrack: AudioTrack? = null
+    private var statsJob: Job? = null
+    private val statsParser = StreamStatsParser()
+
+    /** Runs getStats and parses callbacks on the engine's serial, attempt-bound context. */
+    fun startStats(scope: CoroutineScope) {
+        if (statsJob?.isActive == true || closed) return
+        statsJob = scope.launch {
+            while (isActive && !closed) {
+                val report = suspendCancellableCoroutine<RTCStatsReport> { continuation ->
+                    peerConnection.getStats { report ->
+                        if (continuation.isActive) continuation.resume(report)
+                    }
+                }
+                if (!closed && connectionState == PeerConnectionState.Connected) {
+                    media.stats.value = statsParser.parse(report.statsMap.values.map {
+                        StatsRecord(it.id, it.type, it.timestampUs, it.members)
+                    }, media.firstFrameMs)
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    fun stopStats() {
+        statsJob?.cancel()
+        statsJob = null
+        media.stats.value = null
+    }
 
     init {
+        WebRtcRuntime.activePeers.incrementAndGet()
         try {
             peerConnection.addTransceiver(
                 MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
@@ -161,6 +196,7 @@ internal class WebRtcPeerTransport(
     override fun close() {
         if (closed) return
         closed = true
+        stopStats()
         videoTrack?.let(media::detachVideo)
         audioTrack?.let(media::detachAudio)
         for (channel in channels.values) {
@@ -170,8 +206,12 @@ internal class WebRtcPeerTransport(
         runCatching { peerConnection.close() }
         // Native disposal waits a moment so that a renderer can still detach from the track.
         WebRtcRuntime.disposeLater {
-            channels.values.forEach { it.dispose() }
-            peerConnection.dispose()
+            try {
+                channels.values.forEach { it.dispose() }
+                peerConnection.dispose()
+            } finally {
+                WebRtcRuntime.activePeers.decrementAndGet()
+            }
         }
     }
 

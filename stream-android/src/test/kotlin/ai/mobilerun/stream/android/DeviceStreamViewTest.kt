@@ -238,7 +238,7 @@ class DeviceStreamViewTest {
             ControlMessages.keycode(1, 29, metaState = 4096),
             ControlMessages.text("hello"), ControlMessages.keycode(0, 67), ControlMessages.keycode(1, 67),
             ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
-            ControlMessages.setClipboard("paste", true), ControlMessages.keycode(1, 50, metaState = 4096),
+            ControlMessages.setClipboard("paste", true),
             ControlMessages.keycode(0, 4), ControlMessages.keycode(1, 4),
             ControlMessages.keycode(0, 3), ControlMessages.keycode(1, 3),
             ControlMessages.keycode(0, 187), ControlMessages.keycode(1, 187))

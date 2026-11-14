@@ -4,6 +4,7 @@
 package ai.mobilerun.stream.android
 
 import ai.mobilerun.stream.core.VideoSize
+import android.os.SystemClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,18 +23,34 @@ internal class StreamMedia(initialMuted: Boolean) {
 
     val videoTrack: StateFlow<VideoTrack?> = track.asStateFlow()
     val videoSize: StateFlow<VideoSize?> = size.asStateFlow()
+    val stats = MutableStateFlow<StreamStats?>(null)
+    @Volatile var firstFrameMs: Double? = null
+        private set
+    @Volatile private var attemptStartedNs = 0L
+
+    fun beginAttempt() {
+        attemptStartedNs = SystemClock.elapsedRealtimeNanos()
+        firstFrameMs = null
+        stats.value = null
+    }
 
     @Volatile private var muted = initialMuted
     @Volatile private var audio: AudioTrack? = null
 
-    private val sizeSink = VideoSink { frame: VideoFrame ->
-        val next = VideoSize(frame.buffer.width, frame.buffer.height, frame.rotation)
-        size.value = next
-    }
+    private var sizeSink: VideoSink? = null
 
     fun attachVideo(video: VideoTrack) {
+        track.value?.let(::detachVideo)
+        val sink = VideoSink { frame: VideoFrame ->
+            if (track.value === video) {
+                if (firstFrameMs == null) firstFrameMs =
+                    (SystemClock.elapsedRealtimeNanos() - attemptStartedNs) / 1_000_000.0
+                size.value = VideoSize(frame.buffer.width, frame.buffer.height, frame.rotation)
+            }
+        }
+        sizeSink = sink
         track.value = video
-        video.addSink(sizeSink)
+        video.addSink(sink)
     }
 
     /** Called before the track is released; a frame already in flight may still arrive. */
@@ -41,8 +58,9 @@ internal class StreamMedia(initialMuted: Boolean) {
         if (track.value === video) {
             track.value = null
             size.value = null
+            sizeSink?.let { sink -> runCatching { video.removeSink(sink) } }
+            sizeSink = null
         }
-        runCatching { video.removeSink(sizeSink) }
     }
 
     fun attachAudio(track: AudioTrack) {

@@ -15,6 +15,7 @@ import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
@@ -74,10 +75,15 @@ public class DeviceStreamSession internal constructor(
     private val engine = StreamSessionEngine(
         scope = scope,
         credentials = credentials,
-        signalling = signalling,
+        signalling = { target, listener ->
+            media.beginAttempt()
+            signalling.open(target, listener)
+        },
         peers = peers ?: WebRtcPeerTransportFactory(
             { WebRtcRuntime.factory(appContext) }, media, config.videoCodec),
         logger = config.logger,
+        onPeerConnected = { peer, attemptScope -> (peer as? WebRtcPeerTransport)?.startStats(attemptScope) },
+        onPeerDisconnected = { peer -> (peer as? WebRtcPeerTransport)?.stopStats() },
     )
 
     /** The connection status. */
@@ -85,6 +91,9 @@ public class DeviceStreamSession internal constructor(
 
     /** Size and rotation of the received video; `null` until the first frame and while reconnecting. */
     public val videoSize: StateFlow<VideoSize?> get() = media.videoSize
+
+    /** Inbound-video statistics sampled each second while connected; null otherwise. */
+    public val stats: StateFlow<StreamStats?> = media.stats.asStateFlow()
 
     /**
      * The received video track for a renderer; `null` while there is none. It changes with every

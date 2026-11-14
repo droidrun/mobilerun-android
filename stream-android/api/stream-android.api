@@ -2,6 +2,7 @@ public final class ai/mobilerun/stream/android/DeviceStreamSession {
 	public fun <init> (Landroid/content/Context;Lai/mobilerun/stream/core/StreamCredentialsProvider;Lkotlinx/coroutines/CoroutineScope;Lai/mobilerun/stream/android/StreamConfig;)V
 	public synthetic fun <init> (Landroid/content/Context;Lai/mobilerun/stream/core/StreamCredentialsProvider;Lkotlinx/coroutines/CoroutineScope;Lai/mobilerun/stream/android/StreamConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
+	public final fun getStats ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getVideoSize ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun handleWake ()V
@@ -49,6 +50,24 @@ public final class ai/mobilerun/stream/android/StreamConfig {
 public final class ai/mobilerun/stream/android/StreamLifecycle : java/lang/AutoCloseable {
 	public fun <init> (Landroid/content/Context;Lai/mobilerun/stream/android/DeviceStreamSession;)V
 	public fun close ()V
+}
+
+public final class ai/mobilerun/stream/android/StreamStats {
+	public final fun getBitrateKbps ()Ljava/lang/Double;
+	public final fun getCandidateType ()Ljava/lang/String;
+	public final fun getCodec ()Ljava/lang/String;
+	public final fun getDecodeTimeMs ()Ljava/lang/Double;
+	public final fun getFps ()Ljava/lang/Double;
+	public final fun getFramesDropped ()Ljava/lang/Long;
+	public final fun getFreezeCount ()Ljava/lang/Long;
+	public final fun getHeight ()Ljava/lang/Integer;
+	public final fun getJitterBufferDelayMs ()Ljava/lang/Double;
+	public final fun getLocalCandidateType ()Ljava/lang/String;
+	public final fun getPacketsLost ()Ljava/lang/Long;
+	public final fun getRemoteCandidateType ()Ljava/lang/String;
+	public final fun getRttMs ()Ljava/lang/Double;
+	public final fun getTimeToFirstFrameMs ()Ljava/lang/Double;
+	public final fun getWidth ()Ljava/lang/Integer;
 }
 
 public final class ai/mobilerun/stream/android/SystemKey : java/lang/Enum {

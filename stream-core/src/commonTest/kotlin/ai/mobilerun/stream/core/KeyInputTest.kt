@@ -40,15 +40,14 @@ class KeyInputTest {
         for (meta in listOf(AndroidKeys.META_CTRL_ON, AndroidKeys.META_META_ON)) {
             val messages = route("KeyV", "V", meta)
             assertContentEquals(ControlMessages.setClipboard("paste me", true), messages.first())
-            // React still routes the shortcut's key-up through the control-key branch.
-            assertContentEquals(ControlMessages.keycode(1, 50, metaState = meta), messages.last())
+            assertEquals(1, messages.size)
         }
     }
 
     @Test
     fun menuShortcutSendsImmediatePairAndOtherCombosUseKeycodes() {
         val messages = route("KeyM", "m", AndroidKeys.META_CTRL_ON)
-        assertEquals(3, messages.size)
+        assertEquals(2, messages.size)
         assertContentEquals(ControlMessages.keycode(0, 82), messages[0])
         assertContentEquals(ControlMessages.keycode(1, 82), messages[1])
         val ctrlA = route("KeyA", "a", AndroidKeys.META_CTRL_ON)
@@ -59,9 +58,9 @@ class KeyInputTest {
     @Test
     fun emptyClipboardDoesNotInjectVAndHostBackIsNotForwarded() {
         val messages = mutableListOf<ByteArray>()
-        KeyInput.route(50, "v", true, 4096, { "" }) { messages += it }
+        KeyInput().route(50, "v", true, 4096, { "" }) { messages += it }
         assertEquals(0, messages.size)
-        assertFalse(KeyInput.route(4, null, true, 0, { error("must not read clipboard") }) { messages += it })
+        assertFalse(KeyInput().route(4, null, true, 0, { error("must not read clipboard") }) { messages += it })
         assertEquals(0, messages.size)
     }
 
@@ -69,7 +68,7 @@ class KeyInputTest {
     fun unmappedKeysAreNotConsumedEvenWithModifiersOrPrintableText() {
         for (keycode in listOf(4, 0, 24, 25, 79, 27, 23, 96, 85)) {
             for (meta in listOf(0, AndroidKeys.META_CTRL_ON)) {
-                assertFalse(KeyInput.route(keycode, "x", true, meta, { error("clipboard") },
+                assertFalse(KeyInput().route(keycode, "x", true, meta, { error("clipboard") },
                     send = { error("unmapped input sent") }))
             }
         }
@@ -99,20 +98,21 @@ class KeyInputTest {
             val messages = mutableListOf<ByteArray>()
             val meta = AndroidKeys.META_CTRL_ON or (if (shift) AndroidKeys.META_SHIFT_ON else 0) or
                 0x100000 or 0x40 // platform lock and directional flags must not leak
-            KeyInput.route(29, "a", true, meta, { null }, capsLock) { messages += it }
+            KeyInput().route(29, "a", true, meta, { null }, capsLock) { messages += it }
             val expected = AndroidKeys.META_CTRL_ON or
                 (if (shift != capsLock) AndroidKeys.META_SHIFT_ON else 0)
             assertContentEquals(ControlMessages.keycode(0, 29, metaState = expected), messages.single())
         }
         val messages = mutableListOf<ByteArray>()
-        KeyInput.route(66, null, true, 0x100000, { null }, capsLock = true) { messages += it }
+        KeyInput().route(66, null, true, 0x100000, { null }, capsLock = true) { messages += it }
         assertContentEquals(ControlMessages.keycode(0, 66), messages.single())
     }
 
     private fun route(code: String, text: String?, meta: Int): List<ByteArray> {
         val messages = mutableListOf<ByteArray>()
+        val keys = KeyInput()
         for (down in listOf(true, false)) {
-            KeyInput.route(KeyboardCodes.keycodeByCode.getValue(code), text, down, meta, { "paste me" }) {
+            keys.route(KeyboardCodes.keycodeByCode.getValue(code), text, down, meta, { "paste me" }) {
                 messages += it
             }
         }

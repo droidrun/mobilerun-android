@@ -80,6 +80,8 @@ public class StreamSessionEngine(
     private val nowMs: () -> Long = monotonicMillis(),
     private val newSessionId: () -> String = ::randomSessionId,
     private val logger: StreamLogger? = null,
+    private val onPeerConnected: (PeerTransport, CoroutineScope) -> Unit = { _, _ -> },
+    private val onPeerDisconnected: (PeerTransport) -> Unit = {},
 ) {
     private val engineJob = SupervisorJob(scope.coroutineContext[Job])
     private val serial: CoroutineDispatcher = serialDispatcher(scope)
@@ -251,7 +253,10 @@ public class StreamSessionEngine(
 
     private suspend fun fetchCredentials(): StreamCredentials? =
         try {
-            credentials.credentials()
+            withTimeout(ReconnectPolicy.CONNECT_TIMEOUT_MS) { credentials.credentials() }
+        } catch (_: TimeoutCancellationException) {
+            log("credentials timeout")
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -371,6 +376,7 @@ public class StreamSessionEngine(
         private fun fail() {
             if (!isCurrent || failed) return
             failed = true
+            peer?.let(onPeerDisconnected)
             handshakeTimer?.cancel()
             controller.handleFailure()
         }
@@ -587,12 +593,14 @@ public class StreamSessionEngine(
                     restartRecheck?.cancel()
                     restartRecheck = null
                     controller.handleConnected()
+                    peer?.let { onPeerConnected(it, scope) }
                 }
                 // Media still flows on the old pair during an ICE restart; recheck when the window ends.
                 nowMs() < iceRestartGraceUntil -> scheduleRestartRecheck()
                 else -> {
                     restartRecheck?.cancel()
                     restartRecheck = null
+                    peer?.let(onPeerDisconnected)
                     controller.handleDisconnected()
                 }
             }
