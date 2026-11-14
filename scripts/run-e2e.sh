@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Runs the emulator end-to-end test of :stream-android against a live cloud device.
+# Runs either Android module on an existing emulator; credentials are never bundled.
 #
 # Usage: STREAM_E2E_CREDENTIALS=<json> [STREAM_E2E_OUT=<dir>] [TAP_X=<px> TAP_Y=<px>] \
-#          stream-android/scripts/run-e2e.sh
+#          scripts/run-e2e.sh stream-android
 #
 # Set STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.DeviceStreamViewE2eTest for the view
 # scenario, with TAP_X/Y (app icon) and TEXT_X/Y (text field) in upright video pixels.
@@ -12,25 +12,37 @@
 # Needs a running emulator or device (adb) and JAVA_HOME / ANDROID_HOME set.
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-creds="${STREAM_E2E_CREDENTIALS:?set STREAM_E2E_CREDENTIALS to the credentials json}"
-out="${STREAM_E2E_OUT:-$root/stream-android/build/e2e-out}"
-pkg=ai.mobilerun.stream.android.test
+root="$(cd "$(dirname "$0")/.." && pwd)"
+module="${1:?usage: scripts/run-e2e.sh stream-android|stream-compose}"
+case "$module" in
+  stream-android) pkg=ai.mobilerun.stream.android.test; default_class=ai.mobilerun.stream.android.DeviceStreamE2eTest ;;
+  stream-compose) pkg=ai.mobilerun.stream.compose.test; default_class=ai.mobilerun.stream.compose.DefaultUiE2eTest ;;
+  *) echo "unknown module" >&2; exit 2 ;;
+esac
+creds="${STREAM_E2E_CREDENTIALS:-}"
+out="${STREAM_E2E_OUT:-$root/$module/build/e2e-out}"
 mkdir -p "$out"
 
-[ -f "$creds" ] || { echo "PENDING: credentials file missing" >&2; exit 2; }
+gallery=false
+[ "${STREAM_E2E_TEST_CLASS:-}" = ai.mobilerun.stream.compose.DefaultUiGalleryTest ] && gallery=true
+if [ "$gallery" = false ] && [ ! -f "$creds" ]; then
+  echo "PENDING: credentials file missing" >&2
+  exit 2
+fi
 
 cd "$root"
-./gradlew :stream-android:installDebugAndroidTest --no-daemon
+./gradlew ":$module:installDebugAndroidTest" --no-daemon
 
 trap 'adb shell run-as "$pkg" rm -f files/stream-e2e.json >/dev/null 2>&1 || true' EXIT
 adb shell run-as "$pkg" rm -rf files/e2e-out
 adb shell run-as "$pkg" mkdir -p files/e2e-out
+if [ "$gallery" = false ]; then
 python3 -I - "$creds" <<'PY' | adb shell "run-as $pkg sh -c 'cat > files/stream-e2e.json'"
 import json, sys
 d = json.load(open(sys.argv[1]))
 print(json.dumps({"streamUrl": d["streamUrl"], "streamToken": d["streamToken"]}))
 PY
+fi
 
 extra=()
 [ -n "${TAP_X:-}" ] && extra+=(-e tapX "$TAP_X" -e tapY "${TAP_Y:?set TAP_Y with TAP_X}")
@@ -39,7 +51,7 @@ extra=()
 
 adb logcat -c
 status=0
-test_class="${STREAM_E2E_TEST_CLASS:-ai.mobilerun.stream.android.DeviceStreamE2eTest}"
+test_class="${STREAM_E2E_TEST_CLASS:-$default_class}"
 instrument=(am instrument -w -e class "$test_class"
   ${extra[@]+"${extra[@]}"} "$pkg/androidx.test.runner.AndroidJUnitRunner")
 # adb joins arguments into a remote shell command. Quote each one for that shell too.
@@ -54,4 +66,5 @@ adb exec-out run-as "$pkg" tar -cf - -C files/e2e-out . > "$out/screenshots.tar"
 tar -xf "$out/screenshots.tar" -C "$out"
 rm "$out/screenshots.tar"
 grep -q "OK (" "$out/instrument.log" || status=1
+if grep -q 'PENDING: device' "$out/instrument.log"; then status=2; fi
 exit "$status"

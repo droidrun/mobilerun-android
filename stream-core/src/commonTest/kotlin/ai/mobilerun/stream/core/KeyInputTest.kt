@@ -76,10 +76,20 @@ class KeyInputTest {
     }
 
     @Test
-    fun controlCharactersAreNeverInjectedAsText() {
+    fun singleCharacterHardwareTextMatchesReactEvenForControlCharacters() {
         for (text in listOf("\n", "\t", "\u0000", "\u007f")) {
             val messages = route("KeyA", text, 0)
-            assertContentEquals(ControlMessages.keycode(0, 29), messages.single())
+            assertContentEquals(ControlMessages.text(text), messages.single())
+        }
+    }
+
+    @Test
+    fun mappedFallbackKeysSendBothEdgesWithoutText() {
+        for (text in listOf(null, "", "Dead")) {
+            val messages = route("KeyA", text, 0)
+            assertEquals(2, messages.size)
+            assertContentEquals(ControlMessages.keycode(0, 29), messages[0])
+            assertContentEquals(ControlMessages.keycode(1, 29), messages[1])
         }
     }
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -36,7 +37,7 @@ internal fun Spinner() {
     val angle = rememberInfiniteTransition().animateFloat(
         0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
     )
-    val color = streamThemeTokens.mutedForeground
+    val color = StreamTheme.tokens.mutedForeground
     Canvas(Modifier.size(14.dp).rotate(angle.value)) {
         drawArc(color, 0f, 270f, false, style = Stroke(2.dp.toPx()))
     }
@@ -45,7 +46,7 @@ internal fun Spinner() {
 /** Spinner and label in a standalone pill; the host chooses its corner placement. */
 @Composable
 public fun StreamStatusPill(label: String, modifier: Modifier = Modifier) {
-    val t = streamThemeTokens
+    val t = StreamTheme.tokens
     Row(
         modifier.clip(RoundedCornerShape(50)).background(t.card.copy(alpha = .8f))
             .border(1.dp, t.border, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
@@ -65,10 +66,10 @@ internal fun StreamButton(
     primary: Boolean = false,
     pending: Boolean = false,
 ) {
-    val t = streamThemeTokens
-    val shape = RoundedCornerShape(t.radius)
+    val t = StreamTheme.tokens
+    val shape = RoundedCornerShape(t.radius * .75f)
     Row(
-        modifier.defaultMinSize(minHeight = 48.dp).clip(shape)
+        modifier.alpha(if (enabled) 1f else .5f).defaultMinSize(minHeight = 48.dp).clip(shape)
             .background(if (primary) t.primary else t.background)
             .border(1.dp, t.border, shape).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -77,24 +78,27 @@ internal fun StreamButton(
     ) {
         if (pending) Spinner()
         BasicText(label, style = t.typography.body.copy(
-            color = (if (primary) t.primaryForeground else t.foreground).copy(alpha = if (enabled) 1f else .5f),
+            color = if (primary) t.primaryForeground else t.foreground,
         ))
     }
 }
 
 /** Back/Home/Recent icon actions (Android codes 4/3/187). The caller owns sending and control access. */
 @Composable
-public fun NavigationBar(
+public fun StreamNavigationBar(
     onAction: (SystemKey) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     labels: StreamLabels = StreamLabels(),
 ) {
-    val t = streamThemeTokens
+    val t = StreamTheme.tokens
     Column(modifier.background(t.background)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(t.border))
         Row(Modifier.fillMaxWidth().height(48.dp)) {
-            listOf(SystemKey.BACK to labels.back, SystemKey.HOME to labels.home, SystemKey.RECENT to labels.recent).forEach { (key, label) ->
+            val buttons = listOf(
+                SystemKey.BACK to labels.back, SystemKey.HOME to labels.home, SystemKey.RECENT to labels.recent,
+            )
+            buttons.forEach { (key, label) ->
                 Box(
                     Modifier.weight(1f).fillMaxHeight().semantics { contentDescription = label }
                         .clickable(enabled = enabled, role = Role.Button) { onAction(key) },

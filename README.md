@@ -9,7 +9,7 @@ The headless core, Android connection layer and interactive video view exist. Th
 | Module | Package | Contents |
 |---|---|---|
 | `:protocol` | `ai.mobilerun.stream.protocol` | protocol constants, binary control-message encoders, signalling message types and parser |
-| `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, input routing, approval controller and credentials helper |
+| `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, input routing, approval controller and readiness polling |
 | `:stream-android` | `ai.mobilerun.stream.android` | `DeviceStreamSession` and interactive `DeviceStreamView` |
 | `:stream-compose` | `ai.mobilerun.stream.compose` | optional default UI, tokens, labels, navigation and approval card |
 
@@ -69,10 +69,12 @@ DeviceStream(session = session, modifier = Modifier.fillMaxSize(), hasControl = 
 check; the server decides access. Touch uses stable slots for up to ten fingers, coalesces movement
 per frame and releases at the last position inside the video. Mouse drags use pointer -1; hover
 uses only the hover channel. Wheel axes use Android's tick units, without the browser pixel scaling.
-Hardware printable keys inject text; navigation, modifier and Ctrl/Command combinations inject
+Hardware single-character keys inject text (including control characters, matching React); navigation, modifier and Ctrl/Command combinations inject
 Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shift for letters. Ctrl/Command+V pastes the local primary clipboard;
-Ctrl/Command+M presses Menu. The IME requests immediate text input without suggestions. If an IME composes anyway, composition
-stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. The local input buffer does not mirror the remote editor,
+Ctrl/Command+M presses Menu. Mapped fallback keys without single-character text send DOWN on keydown and UP on keyup.
+The IME uses a normal text keyboard with suggestions/autocorrect disabled and the no-personalized-learning hint on Android 8+. If an IME composes anyway, composition
+stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed newline and tab become ENTER/TAB; other
+committed control characters are dropped. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
 
 The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
@@ -93,20 +95,19 @@ The optional `:stream-compose` module uses Compose foundation only. It does not 
 colors or typography, show a logo, or put a product name in the UI. `DeviceStream` adds a bottom-left
 status pill while connecting/reconnecting, an unavailable message with Retry, and a navigation bar
 below the video. Retry calls the same session recovery path as a custom UI. Reconnecting labels take
-precedence over `placeholderLabel`; connected video remains visible with `hasControl = false`, which
-also disables the navigation buttons. The standalone `NavigationBar(onAction)` emits `SystemKey`
+precedence over `labels.connecting`; connected video remains visible with `hasControl = false`, which
+also disables the navigation buttons. The standalone `StreamNavigationBar(onAction)` emits `SystemKey`
 BACK/HOME/RECENT (4/3/187). `StreamStatusPill(label)` is reusable independently.
 
 ```kotlin
-MobilerunTheme { // follows system light/dark mode
+StreamTheme { // light by default; opt in with followSystem = true
     DeviceStream(
         session = session,
         modifier = Modifier.fillMaxSize(),
         labels = StreamLabels(connecting = "Preparing", retry = "Try again"),
-        placeholderLabel = deviceState,
-        navigationBar = null, // omit, or provide { action, enabled -> ... }
-        // placeholder = { status, label -> YourPlaceholder(status, label) },
-        // unavailable = { retry -> YourUnavailable(retry) },
+        navigationBar = {}, // omit, or provide { state -> ... }
+        // placeholder = { status, labels -> YourPlaceholder(status, labels) },
+        // unavailable = { retry, labels -> YourUnavailable(retry, labels) },
     )
 }
 ```
@@ -120,23 +121,25 @@ Backend-provided fact values and error messages remain the integrator's responsi
 Override individual theme tokens via `copy`, without modifying the rest:
 
 ```kotlin
-val tokens = StreamThemeTokens.Dark.copy(
+val tokens = StreamThemeTokens.dark().copy(
     primary = Color(0xFF2563EB),
     primaryForeground = Color.White,
     radius = 12.dp,
     typography = StreamTypography(body = TextStyle(fontSize = 16.sp)),
 )
-MobilerunTheme(tokens) { DeviceStream(session, Modifier.fillMaxSize()) }
+StreamTheme(tokens) { DeviceStream(session, Modifier.fillMaxSize()) }
 ```
 
 All thirteen React semantic colors are exposed: background, foreground, card, cardForeground,
 muted, mutedForeground, border, ring, primary, primaryForeground, accent, accentForeground,
-destructive, plus radius and body/caption/title typography. Slots can read `streamThemeTokens`.
+destructive, plus radius and body/caption/title typography. The ring, accent and accentForeground
+tokens are reserved for focus/accent styling in custom slots; defaults do not currently read them. Slots can read `StreamTheme.tokens`. Light is the default even when the system is dark; use
+`StreamTheme(tokens = StreamThemeTokens.dark())` or `StreamTheme(followSystem = true)` to opt in.
 The defaults are React's `styles.css` values converted once: OKLCH → OKLab → linear sRGB using
 CSS Color 4 matrices, apply the sRGB transfer function, clip each channel to [0, 1], round to 8 bits.
 Light neutrals are #FFFFFF/#0A0A0A/#F5F5F5/#737373/#E5E5E5/#A1A1A1/#171717/#FAFAFA;
 destructive is #E7000B. Dark adds #262626 and destructive #FF6467; its border retains 10% white.
-Native dp/sp replace CSS px; the default radius is 8 dp and text is 12/14/16 sp. Native buttons use
+Native dp/sp replace CSS px; the default radius is 8 dp (6 dp for buttons) and text is 12/14/16 sp. Native buttons use
 48 dp touch targets. Each property is independently replaceable.
 
 The plain `DeviceStreamView` remains the View API for custom hosts. Navigation, pill, approval card,
@@ -154,8 +157,8 @@ Unknown kinds or invalid payment details show the generic heading and keep the a
 val controller = TaskApprovalController(
     scope = scope,
     fetchApproval = { taskId -> backend.pendingApproval(taskId) },
-    decide = { taskId, approvalId, decision -> backend.decide(taskId, approvalId, decision) },
-    // subscribe = { taskId, changed -> backend.subscribe(taskId, changed) }, // returns unsubscribe
+    sendDecision = { taskId, approvalId, decision -> backend.decide(taskId, approvalId, decision.value) },
+    // subscribe = { taskId, changed -> backend.subscribe(taskId, changed) }, // returns AutoCloseable
 )
 controller.setTask(taskId)
 // In Compose:
@@ -168,7 +171,7 @@ TaskApproval(
     error = state.error?.message,
     labels = TaskApprovalLabels(approve = "Allow", deny = "Reject"),
     // device = { DeviceStream(session, Modifier.fillMaxSize()) },
-    // actions = { decide, pending, decision -> YourApprovalActions(decide, pending, decision) },
+    // actions = { state -> YourApprovalActions(state.onDecide, state.isPending, state.decision) },
 )
 // On host disposal:
 controller.close() // scope cancellation also cleans up
@@ -179,43 +182,49 @@ subscription turns polling off by default; set `pollIntervalMs` explicitly to co
 to disable it. Push events only refetch. Overlapping/old-task results are dropped. `refetch()` does
 not re-subscribe. Decisions are deduplicated, and every success/error triggers a refetch, including
 404/409. A decision error survives successful fetches until the next decision or task change; a fetch
-error clears after a successful fetch. `setTask(id, enabled = false)` clears state and stops work.
+error clears after a successful fetch. `setTask(null)` clears state and stops work. Integrator timeouts/cancellation are errors, while
+closing the controller cancels its work. Subscription, unsubscribe and error-handler failures cannot
+crash the host.
 
+`PendingApproval.paymentCardDetails()` validates only payment-card kinds.
 `parsePaymentCardDetails` accepts a nonempty label (falling back to credentialName), targetPackage
 and optional targetHost, ignoring wrongly typed optional fields. `remainingMs` and `formatRemaining`
-match React's countdown utilities. The card's one-second countdown is display only: **the backend
+match React's countdown utilities. The card's isolated one-second countdown stops ticking at expiry and is display only: **the backend
 decides expiry and permission**. Expired approvals still forward decisions. The optional device slot
 appears beside details on wide layouts; narrow layouts switch Details/Device while retaining the
-slot's composition. The approval actions are independently replaceable.
+slot's composition, including when resizing across the 768 dp breakpoint. The approval actions are independently replaceable.
 
 ## Visibility, network recovery and credentials
 
 `DeviceStream` installs `StreamLifecycle` automatically. App background pauses keep-alive sends;
-foreground and a new default network call `session.handleWake()`, which retries pending backoff
+a real background-to-foreground or network-lost-to-available transition calls `session.handleWake()`, which retries pending backoff
 immediately or starts a fresh recovery cycle from unavailable. It never starts a session that has
 not been started, or revives a closed session. The host still owns start/close. For custom View UI,
 create `StreamLifecycle(context, session)` on the main thread and close it on disposal. To manage
 visibility yourself set `observeLifecycle = false`, then call `setHostVisible` and `handleWake`.
-Use one lifecycle adapter per session.
+Registration's replayed ON_START and first network availability are ignored. Use one lifecycle adapter
+per session.
 
-The credentials helper mirrors React's readiness polling without handling an API key:
+The engine is the only credentials poll owner. Pass the integrator's backend callback directly:
 
 ```kotlin
-val credentials = DeviceStreamCredentials(fetchDevice = {
-    backend.streamCredentials() // StreamCredentials?; null while not ready
-})
-val session = DeviceStreamSession(context, credentials.provider, scope)
+val session = DeviceStreamSession(context, { backend.streamCredentials() }, scope)
 session.start()
 ```
 
-It polls every 3 seconds while the callback returns null; a recovery/heal invokes it again for fresh
-credentials. Cancellation stops polling. Fetch failures propagate to the session's existing retry
-behavior. Stream tokens are short-lived backend-issued values; keep API keys exclusively on your
-backend and never embed either in source or screenshots.
+The callback returns `StreamCredentials?`; null means not ready. The engine polls every 3 seconds,
+including after fetch failures, and refetches on recovery/heal. Cancellation stops polling. No API
+key belongs in the app: stream tokens are short-lived backend-issued values.
+
+All overlay slots have a `BoxScope` receiver for placement. The navigation slot receives one
+`StreamNavigationState` (canControl, labels, onAction); the approval action slot receives one
+`ApprovalActionsState` (isPending, decision, labels, onDecide). Slots have non-null defaults, and an
+empty navigation lambda removes the bar. The default empty device slot omits device layout. Public
+value types are plain classes; theme and label types expose explicit `copy` methods.
 
 ## End-to-end check
 
-`stream-android/scripts/run-e2e.sh` runs an instrumented test against a live cloud device on an emulator: first frame, a tap sent as raw control bytes, a forced socket close with full rebuild, and a mid-session configuration refresh. Credentials come from a JSON file (`streamUrl`, `streamToken`) named by `STREAM_E2E_CREDENTIALS` and are copied into the test app's private storage at run time, never into the repository or the APK.
+`scripts/run-e2e.sh stream-android` runs an instrumented test against a live cloud device on an emulator: first frame, a tap sent as raw control bytes, a forced socket close with full rebuild, and a mid-session configuration refresh. Credentials come from a JSON file (`streamUrl`, `streamToken`) named by `STREAM_E2E_CREDENTIALS` and are copied into the test app's private storage at run time, never into the repository or the APK.
 
 For the interactive view scenario, set `STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.DeviceStreamViewE2eTest`.
 Supply `TAP_X`/`TAP_Y` for an app icon and `TEXT_X`/`TEXT_Y` for its text field, in upright
@@ -228,9 +237,12 @@ local-renderer screenshots and logs. Runtime target selection belongs outside th
 
 The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states.
 
-`stream-compose/scripts/run-e2e.sh` uses the same runtime-only credentials contract for the default
-UI. It captures connecting/reconnecting/unavailable/retry, light/dark/custom theme and labels,
-approval countdown/decision/refetch, plus live video with navigation. Recovery uses deliberately
+`scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default
+UI. The credential-free `DefaultUiGalleryTest` separately captures
+connecting/reconnecting/unavailable/retry, light/dark/custom theme and labels, and
+approval countdown/decision/refetch. Select it with
+`STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.compose.DefaultUiGalleryTest`.
+The separate `DefaultUiE2eTest` verifies live video with navigation and recovery using deliberately
 expired credentials, then restores the provider and clicks Retry. A 401/404 for the initial valid
 device is reported as pending for the live-device scenario. No real approval task is required.
 

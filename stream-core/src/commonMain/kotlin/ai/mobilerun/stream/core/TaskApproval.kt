@@ -6,14 +6,35 @@ package ai.mobilerun.stream.core
 import kotlin.math.ceil
 import kotlin.time.Instant
 
-/** Pending human approval returned by the integrator's backend. Unknown kinds are supported. */
-public data class PendingApproval(
+/** Pending human approval returned by the backend. Unknown kinds are supported. */
+public class PendingApproval(
     public val approvalId: String,
     public val kind: String,
     public val details: Map<String, Any?>,
     public val expiresAt: String,
     public val deviceId: String? = null,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        other is PendingApproval &&
+            approvalId == other.approvalId &&
+            kind == other.kind &&
+            details == other.details &&
+            expiresAt == other.expiresAt &&
+            deviceId == other.deviceId
+
+    override fun hashCode(): Int {
+        var result = approvalId.hashCode()
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + details.hashCode()
+        result = 31 * result + expiresAt.hashCode()
+        result = 31 * result + deviceId.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "PendingApproval(approvalId=$approvalId, kind=$kind, details=$details, " +
+        "expiresAt=$expiresAt, deviceId=$deviceId)"
+}
 
 /** A decision to forward to the backend; the backend alone authorizes it. */
 public enum class ApprovalDecision(
@@ -27,11 +48,33 @@ public enum class ApprovalDecision(
 }
 
 /** Validated display fields of a payment-card approval. */
-public data class PaymentCardDetails(
+public class PaymentCardDetails(
     public val card: String,
     public val targetPackage: String,
     public val targetHost: String? = null,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        other is PaymentCardDetails &&
+            card == other.card &&
+            targetPackage == other.targetPackage &&
+            targetHost == other.targetHost
+
+    override fun hashCode(): Int {
+        var result = card.hashCode()
+        result = 31 * result + targetPackage.hashCode()
+        result = 31 * result + targetHost.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "PaymentCardDetails(card=$card, targetPackage=$targetPackage, targetHost=$targetHost)"
+}
+
+private const val PAYMENT_CARD_KIND = "payment_card"
+
+/** Validated payment details for this approval, or null for unknown kinds/invalid details. */
+public fun PendingApproval.paymentCardDetails(): PaymentCardDetails? =
+    if (kind == PAYMENT_CARD_KIND) parsePaymentCardDetails(details) else null
 
 /** Wrong-typed optional values count as absent; missing card/package makes details invalid. */
 public fun parsePaymentCardDetails(details: Any?): PaymentCardDetails? {

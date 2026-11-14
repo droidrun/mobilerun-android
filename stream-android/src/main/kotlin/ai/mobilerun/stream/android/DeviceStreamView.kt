@@ -10,6 +10,7 @@ import ai.mobilerun.stream.core.VideoSize
 import ai.mobilerun.stream.protocol.AndroidKeys
 import ai.mobilerun.stream.protocol.ControlMessages
 import android.content.ClipboardManager
+import android.os.Build
 import android.content.Context
 import android.graphics.Rect
 import android.graphics.RectF
@@ -320,9 +321,11 @@ public class DeviceStreamView @JvmOverloads public constructor(
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!onCheckIsTextEditor()) return null
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        }
         outAttrs.initialSelStart = 0
         outAttrs.initialSelEnd = 0
         val generation = inputGeneration

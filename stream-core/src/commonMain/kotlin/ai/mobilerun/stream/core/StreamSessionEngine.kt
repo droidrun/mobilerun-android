@@ -15,8 +15,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -29,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.Volatile
-import kotlin.coroutines.ContinuationInterceptor
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlin.time.Duration
@@ -37,7 +34,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /** How often the credentials provider is asked again while it keeps returning `null`. */
-internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 2_000
+internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
 
 /**
  * The connection logic of one device stream, independent of any platform: it drives a
@@ -636,13 +633,6 @@ internal fun decodeDataUri(dataUri: String): ByteArray {
 internal fun randomSessionId(): String {
     val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
     return buildString { repeat(24) { append(alphabet[Random.nextInt(alphabet.length)]) } }
-}
-
-// The engine's own serial context: its state is only touched from there.
-@OptIn(ExperimentalCoroutinesApi::class)
-internal fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
-    val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
-    return base.limitedParallelism(1)
 }
 
 private fun monotonicMillis(): () -> Long {

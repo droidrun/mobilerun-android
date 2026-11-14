@@ -3,94 +3,100 @@
 
 package ai.mobilerun.stream.core
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Snapshot of approval loading and decision progress. Decision errors take precedence over fetch errors. */
-public data class TaskApprovalState(
-    public val approval: PendingApproval? = null,
-    public val isLoading: Boolean = false,
-    public val error: Throwable? = null,
-    public val isDeciding: Boolean = false,
-    public val decision: ApprovalDecision? = null,
-)
-
-/** Push events are hints to reload, never approval data. The returned callback unsubscribes. */
-public typealias ApprovalSubscription = (taskId: String, onChange: () -> Unit) -> (() -> Unit)
+/** Push events only trigger reloads. Closing the returned handle unsubscribes. */
+public fun interface ApprovalSubscription {
+    /** Subscribes to changes for one task. */
+    public fun subscribe(taskId: String, onChange: () -> Unit): AutoCloseable
+}
 
 /**
- * Coroutine counterpart of React's useTaskApproval. All callbacks talk to the integrator's backend,
- * never directly to an API with an embedded key. Polls every three seconds after a completed fetch
- * unless [subscribe] is provided. Overlapping fetches keep only the newest result. Every decision,
- * successful or failed (including HTTP 404/409), triggers a refetch and preserves its error.
- *
- * Call [setTask] to start/change/disable a task; [close] or scope cancellation unsubscribes and stops.
- * All methods are safe from any thread. Callbacks run on the serial dispatcher derived from [scope].
+ * Coroutine counterpart of React's useTaskApproval. Callbacks talk to the integrator's backend.
+ * Polls every three seconds after fetching unless [subscribe] is provided. Only the newest fetch
+ * result applies. Every decision triggers a refetch, including errors and integrator timeouts.
+ * All methods are thread-safe; [close] or scope cancellation stops work and unsubscribes.
  */
 public class TaskApprovalController(
     scope: CoroutineScope,
     private val fetchApproval: suspend (taskId: String) -> PendingApproval?,
-    private val decide: suspend (taskId: String, approvalId: String, decision: ApprovalDecision) -> Unit,
+    private val sendDecision: suspend (taskId: String, approvalId: String, decision: ApprovalDecision) -> Unit,
     private val subscribe: ApprovalSubscription? = null,
     private val pollIntervalMs: Long = if (subscribe == null) 3_000 else 0,
     private val onError: (Throwable) -> Unit = {},
 ) {
     private val job = SupervisorJob(scope.coroutineContext[Job])
-    private val serial = serialDispatcher(scope)
-    private val worker = CoroutineScope(scope.coroutineContext + serial + job)
+    private val worker = CoroutineScope(scope.coroutineContext + serialDispatcher(scope) + job)
     private val mutableState = MutableStateFlow(TaskApprovalState())
-    /** The current approval and operation state. */
+    /** Current approval and progress. Decision errors survive successful refetches. */
     public val state: StateFlow<TaskApprovalState> = mutableState.asStateFlow()
     private var taskId: String? = null
     private var generation = 0L
     private var latest = 0L
     private var poll: Job? = null
-    private var unsubscribe: (() -> Unit)? = null
+    private var subscription: Job? = null
     private var fetchError: Throwable? = null
     private var decideError: Throwable? = null
 
     init {
         require(pollIntervalMs >= 0) { "pollIntervalMs must be non-negative" }
-        job.invokeOnCompletion {
-            CoroutineScope(serial).launch { unsubscribe?.invoke(); unsubscribe = null }
-        }
     }
 
-    /** Binds a task. Changing it clears approval, errors and decision progress; disabled tasks do no work. */
-    public fun setTask(taskId: String, enabled: Boolean = true) {
+    /** Binds a task; null/empty disables work and clears all state. */
+    public fun setTask(taskId: String?) {
         worker.launch {
-            val next = taskId.takeIf { enabled && it.isNotEmpty() }
+            val next = taskId?.takeIf { it.isNotEmpty() }
             if (this@TaskApprovalController.taskId == next) return@launch
             generation++
             latest++
             poll?.cancel()
-            unsubscribe?.invoke()
-            unsubscribe = null
+            subscription?.cancel()
             this@TaskApprovalController.taskId = next
             fetchError = null
             decideError = null
-            mutableState.value = TaskApprovalState(isLoading = next != null)
+            publish { TaskApprovalState(isLoading = next != null) }
             if (next == null) return@launch
             load()
             val bound = generation
-            unsubscribe = subscribe?.invoke(next) {
-                worker.launch { if (bound == generation) load() }
+            subscription = worker.launch {
+                val handle = try {
+                    subscribe?.subscribe(next) {
+                        worker.launch { if (isNewest(bound)) load() }
+                    } ?: return@launch
+                } catch (failure: Throwable) {
+                    job.ensureActive()
+                    if (isNewest(bound)) {
+                        fetchError = failure
+                        publish()
+                        reportError(failure)
+                    }
+                    return@launch
+                }
+                try {
+                    awaitCancellation()
+                } finally {
+                    runCatching { handle.close() }.onFailure(::reportError)
+                }
             }
         }
     }
 
-    /** Reloads without re-subscribing. Older overlapping results are discarded. */
-    public fun refetch() { worker.launch { load() } }
+    /** Reloads without subscribing again; overlapping older results are discarded. */
+    public fun refetch() {
+        worker.launch { load() }
+    }
 
-    /** Forwards one decision at a time. No local expiry gate: the server decides. */
+    /** Sends one decision at a time. Expiry is display-only; the backend decides. */
     public fun decide(decision: ApprovalDecision) {
         worker.launch {
             val id = taskId ?: return@launch
@@ -99,21 +105,37 @@ public class TaskApprovalController(
             if (current.isDeciding) return@launch
             val bound = generation
             decideError = null
-            mutableState.value = current.copy(isDeciding = true, decision = decision, error = fetchError)
+            publish { it.copy(isDeciding = true, decision = decision) }
             val failure = try {
-                decide(id, approval.approvalId, decision)
+                sendDecision(id, approval.approvalId, decision)
                 null
-            } catch (e: CancellationException) { throw e } catch (e: Exception) { e }
-            if (bound != generation) return@launch
+            } catch (failure: Throwable) {
+                job.ensureActive()
+                failure
+            }
+            if (!isNewest(bound)) return@launch
             decideError = failure
-            mutableState.value = state.value.copy(isDeciding = false, error = decideError ?: fetchError)
-            if (failure != null) onError(failure)
+            publish { it.copy(isDeciding = false) }
+            if (failure != null) reportError(failure)
             load()
         }
     }
 
-    /** Stops polling, subscriptions and callbacks. A closed controller cannot restart. */
-    public fun close() { worker.cancel() }
+    /** Stops work and closes the subscription. A closed controller cannot restart. */
+    public fun close() {
+        worker.cancel()
+    }
+
+    private fun isNewest(bound: Long, sequence: Long = latest): Boolean =
+        job.isActive && bound == generation && sequence == latest
+
+    private fun publish(change: (TaskApprovalState) -> TaskApprovalState = { it }) {
+        mutableState.value = change(state.value).copy(error = decideError ?: fetchError)
+    }
+
+    private fun reportError(failure: Throwable) {
+        runCatching { onError(failure) }
+    }
 
     private fun load() {
         val id = taskId ?: return
@@ -123,18 +145,22 @@ public class TaskApprovalController(
         worker.launch {
             try {
                 val next = fetchApproval(id)
-                if (bound != generation || sequence != latest) return@launch
+                if (!isNewest(bound, sequence)) return@launch
                 fetchError = null
-                mutableState.value = state.value.copy(approval = next, error = decideError)
-            } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                if (bound != generation || sequence != latest) return@launch
-                fetchError = e
-                mutableState.value = state.value.copy(error = decideError ?: e)
-                onError(e)
+                publish { it.copy(approval = next) }
+            } catch (failure: Throwable) {
+                job.ensureActive()
+                if (!isNewest(bound, sequence)) return@launch
+                fetchError = failure
+                publish()
+                reportError(failure)
             } finally {
-                if (bound == generation && sequence == latest) {
-                    mutableState.value = state.value.copy(isLoading = false)
-                    if (pollIntervalMs > 0) poll = worker.launch { delay(pollIntervalMs); load() }
+                if (isNewest(bound, sequence)) {
+                    publish { it.copy(isLoading = false) }
+                    if (pollIntervalMs > 0) poll = worker.launch {
+                        delay(pollIntervalMs)
+                        load()
+                    }
                 }
             }
         }

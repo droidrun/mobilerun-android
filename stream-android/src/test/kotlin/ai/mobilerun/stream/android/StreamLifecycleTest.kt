@@ -11,6 +11,7 @@ import android.net.ConnectivityManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -19,46 +20,97 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.shadows.ShadowConnectivityManager
 import org.robolectric.shadows.ShadowNetwork
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class StreamLifecycleTest {
-    @Test fun foregroundAndNetworkWakeAndCloseUnregisters() = runTest {
+    private class Owner : LifecycleOwner {
+        override val lifecycle = LifecycleRegistry(this)
+    }
+
+    private class Harness(scope: TestScope) {
         val context = RuntimeEnvironment.getApplication()
-        val registry = LifecycleRegistry(object : LifecycleOwner {
-            override val lifecycle: Lifecycle get() = error("registry supplies events")
-        })
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        val owner = Owner()
+        val registry get() = owner.lifecycle
         val listeners = mutableListOf<SignallingListener>()
+        val network = shadowOf(context.getSystemService(ConnectivityManager::class.java))
         val session = DeviceStreamSession(context, { StreamCredentials("wss://example.test", "temporary") },
-            backgroundScope, StreamConfig(), SignallingTransportFactory { _, listener ->
+            scope.backgroundScope, StreamConfig(), SignallingTransportFactory { _, listener ->
                 listeners += listener
                 object : SignallingTransport {
                     override fun send(text: String) = true
                     override fun close() = Unit
                 }
             }, PeerTransportFactory { _, _, _ -> error("no negotiation in this test") })
-        val network = shadowOf(context.getSystemService(ConnectivityManager::class.java))
-        val adapter = StreamLifecycle(context, session, registry)
-        assertEquals(1, network.networkCallbacks.size)
-        val callback = network.networkCallbacks.single()
-        session.start(); runCurrent()
-        listeners.last().onFailure(null); runCurrent()
-        assertEquals(1, listeners.size)
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_START); runCurrent()
-        assertEquals(2, listeners.size)
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP); runCurrent()
-        listeners.last().onFailure(null); runCurrent()
-        callback.onAvailable(ShadowNetwork.newInstance(1)); runCurrent()
-        assertEquals(3, listeners.size)
-        adapter.close(); adapter.close()
-        assertTrue(network.networkCallbacks.isEmpty())
-        session.close(); runCurrent()
-        registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        callback.onAvailable(ShadowNetwork.newInstance(2)); runCurrent()
-        assertEquals(3, listeners.size)
+    }
+
+    @Test fun resumedRegistrationDoesNotWakeButStopStartDoes() = runTest {
+        val h = Harness(this)
+        h.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        h.session.start()
+        runCurrent()
+        h.listeners.last().onFailure(null)
+        runCurrent()
+        val adapter = StreamLifecycle(h.context, h.session, h.registry)
+        runCurrent()
+        assertEquals(1, h.listeners.size)
+        h.registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        h.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        runCurrent()
+        assertEquals(2, h.listeners.size)
+        adapter.close()
+    }
+
+    @Test fun networkRegistrationIsIgnoredAndOnlyLossRecoveryWakes() = runTest {
+        val h = Harness(this)
+        val adapter = StreamLifecycle(h.context, h.session, h.registry)
+        val callback = h.network.networkCallbacks.single()
+        h.session.start()
+        runCurrent()
+        h.listeners.last().onFailure(null)
+        runCurrent()
+        callback.onAvailable(ShadowNetwork.newInstance(1))
+        runCurrent()
+        assertEquals(1, h.listeners.size)
+        callback.onLost(ShadowNetwork.newInstance(1))
+        callback.onAvailable(ShadowNetwork.newInstance(2))
+        runCurrent()
+        assertEquals(2, h.listeners.size)
+        callback.onAvailable(ShadowNetwork.newInstance(2))
+        runCurrent()
+        assertEquals(2, h.listeners.size)
+        adapter.close()
+        adapter.close()
+        assertTrue(h.network.networkCallbacks.isEmpty())
+        h.session.close()
+        callback.onLost(ShadowNetwork.newInstance(2))
+        callback.onAvailable(ShadowNetwork.newInstance(3))
+        runCurrent()
+        assertEquals(2, h.listeners.size)
+    }
+
+    @Implements(ConnectivityManager::class)
+    class FailingConnectivity : ShadowConnectivityManager() {
+        @Implementation
+        override fun registerDefaultNetworkCallback(callback: ConnectivityManager.NetworkCallback) {
+            throw IllegalStateException("registration failed")
+        }
+    }
+
+    @Test
+    @Config(shadows = [FailingConnectivity::class])
+    fun failedRegistrationRemovesLifecycleObserver() = runTest {
+        val h = Harness(this)
+        h.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        val before = h.registry.observerCount
+        assertFailsWith<IllegalStateException> { StreamLifecycle(h.context, h.session, h.registry) }
+        assertEquals(before, h.registry.observerCount)
     }
 }
