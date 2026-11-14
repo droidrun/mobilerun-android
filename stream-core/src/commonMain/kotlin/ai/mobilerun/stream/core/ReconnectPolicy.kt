@@ -17,15 +17,19 @@ public object ReconnectPolicy {
      * timeouts combined (30 s) so it never preempts a slow-but-valid handshake the connection layer
      * still considers on budget.
      */
+    @InternalStreamApi
     public const val CONNECT_TIMEOUT_MS: Long = 45_000
 
     /** Holding a connection this long refills the retry budget and re-arms the credential refresh. */
+    @InternalStreamApi
     public const val STABILITY_MS: Long = 30_000
 
     /** Backoff base: the delay before the first retry. */
+    @InternalStreamApi
     public const val BASE_DELAY_MS: Long = 1_000
 
     /** Backoff cap before jitter. */
+    @InternalStreamApi
     public const val MAX_DELAY_MS: Long = 30_000
 
     /**
@@ -36,6 +40,7 @@ public object ReconnectPolicy {
      * @param attempt consecutive failed attempts so far; values below 1 count as 1.
      * @param random jitter source returning a value in `[0, 1)`; `0.5` means no jitter.
      */
+    @InternalStreamApi
     public fun delayMs(attempt: Int, random: Double): Long {
         val base = min(BASE_DELAY_MS * 2.0.pow(maxOf(1, attempt) - 1), MAX_DELAY_MS.toDouble())
         return jsRound(base * (0.75 + random * 0.5)).toLong()

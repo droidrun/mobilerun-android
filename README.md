@@ -15,6 +15,23 @@ The headless core, Android connection layer and interactive video view exist. Th
 
 `:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; all code lives in `commonMain`. `:stream-android` is an Android library (minSdk 24, compileSdk 36, JVM 17).
 
+## Installation (after first release)
+
+These coordinates are reserved for the first Maven Central release; they are not available yet.
+With `mavenCentral()` configured, use:
+
+```kotlin
+dependencies {
+    implementation("ai.mobilerun:mobilerun-stream-android:0.1.0")
+    // Optional Compose UI; includes the Android streaming module transitively.
+    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+}
+```
+
+Android requires minSdk 24 and JDK 17. For headless JVM use, choose
+`ai.mobilerun:mobilerun-stream-core:0.1.0`; Gradle selects its JVM variant.
+See [RELEASING.md](RELEASING.md) for artifact details and the release checklist.
+
 ## Streaming a device
 
 ```kotlin
@@ -187,9 +204,9 @@ closing the controller cancels its work. Subscription, unsubscribe and error-han
 crash the host.
 
 `PendingApproval.paymentCardDetails()` validates only payment-card kinds.
-`parsePaymentCardDetails` accepts a nonempty label (falling back to credentialName), targetPackage
-and optional targetHost, ignoring wrongly typed optional fields. `remainingMs` and `formatRemaining`
-match React's countdown utilities. The card's isolated one-second countdown stops ticking at expiry and is display only: **the backend
+`paymentCardDetails()` accepts a nonempty label (falling back to credentialName), targetPackage
+and optional targetHost, ignoring wrongly typed optional fields. The card's isolated one-second
+countdown stops ticking at expiry and is display only: **the backend
 decides expiry and permission**. Expired approvals still forward decisions. The optional device slot
 appears beside details on wide layouts; narrow layouts switch Details/Device while retaining the
 slot's composition, including when resizing across the 768 dp breakpoint. The approval actions are independently replaceable.

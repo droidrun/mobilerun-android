@@ -25,6 +25,7 @@ public class InputGeometry private constructor(
         return InputPoint(relativeX / width * videoWidth, relativeY / height * videoHeight)
     }
 
+    @InternalStreamApi
     public companion object {
         /** No geometry until both the view and the decoded video have nonzero dimensions. */
         public fun fit(viewWidth: Int, viewHeight: Int, video: VideoSize?): InputGeometry? {

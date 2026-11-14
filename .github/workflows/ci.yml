@@ -24,3 +24,30 @@ jobs:
           git diff --exit-code -- protocol/src/commonMain/kotlin/ai/mobilerun/stream/protocol/Constants.kt
       - name: Check
         run: ./gradlew check --no-daemon
+      - name: Build unsigned publications locally
+        run: ./gradlew publishToMavenLocal -PsignAllPublications=false
+      - name: Verify and list artifacts
+        shell: bash
+        run: |
+          version=$(sed -n 's/^VERSION_NAME=//p' gradle.properties)
+          for artifact in protocol core android compose; do
+            coordinate="mobilerun-stream-$artifact"
+            extension=aar
+            if [[ "$artifact" == protocol || "$artifact" == core ]]; then
+              extension=jar
+            fi
+            directory="$HOME/.m2/repository/ai/mobilerun/$coordinate/$version"
+            for suffix in ".$extension" .pom -sources.jar -javadoc.jar; do
+              file="$directory/$coordinate-$version$suffix"
+              if [[ ! -s "$file" ]]; then
+                echo "::error::Expected publication artifact missing or empty: $coordinate-$version$suffix"
+                exit 1
+              fi
+            done
+          done
+          {
+            echo '### Maven Local artifacts (unsigned dry run)'
+            echo '```text'
+            find "$HOME/.m2/repository/ai/mobilerun" -type f | sed "s|$HOME/.m2/repository/||" | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

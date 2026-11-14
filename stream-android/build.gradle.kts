@@ -1,4 +1,5 @@
 plugins {
+    alias(libs.plugins.maven.publish)
     alias(libs.plugins.android.library)
 }
 
@@ -37,7 +38,6 @@ kotlin {
 }
 
 dependencies {
-    api(project(":protocol"))
     api(project(":stream-core"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
