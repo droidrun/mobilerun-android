@@ -1,3 +1,8 @@
+import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.variant.LibraryAndroidComponentsExtension
+import kotlinx.validation.KotlinApiBuildTask
+import kotlinx.validation.KotlinApiCompareTask
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 plugins {
@@ -5,6 +10,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.maven.publish) apply false
+    alias(libs.plugins.binary.compatibility.validator)
 }
 
 val conformanceDir = layout.projectDirectory.dir("conformance")
@@ -37,6 +44,84 @@ subprojects {
             val fixtures = conformanceDir.dir("fixtures")
             inputs.dir(fixtures)
             systemProperty("conformance.fixtures", fixtures.asFile.absolutePath)
+        }
+    }
+}
+
+// All published modules share coordinates and Central-required metadata.
+subprojects {
+    group = providers.gradleProperty("GROUP").get()
+    version = providers.gradleProperty("VERSION_NAME").get()
+    plugins.withId("com.vanniktech.maven.publish") {
+        extensions.configure<MavenPublishBaseExtension> {
+            val artifactId = if (project.name == "protocol") "mobilerun-stream-protocol" else "mobilerun-${project.name}"
+            coordinates(group.toString(), artifactId, version.toString())
+            publishToMavenCentral()
+            // Local/PR builds never need signing material. Release CI explicitly enables signing.
+            if (providers.gradleProperty("signAllPublications").orNull == "true") {
+                signAllPublications()
+            }
+            pom {
+                name.set("Mobilerun ${project.name}")
+                description.set("Mobilerun device streaming: ${project.name} module")
+                url.set("https://github.com/droidrun/mobilerun-android")
+                licenses {
+                    license {
+                        name.set("Apache License, Version 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("mobilerun")
+                        name.set("Mobilerun")
+                        url.set("https://mobilerun.ai")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/droidrun/mobilerun-android")
+                    connection.set("scm:git:https://github.com/droidrun/mobilerun-android.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/droidrun/mobilerun-android.git")
+                }
+            }
+        }
+    }
+}
+
+apiValidation {
+    nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
+}
+
+// BCV 0.18.2 detects the legacy Kotlin Android plugin, not AGP's built-in Kotlin.
+// Validate the actual release AAR classes with the same validator used for the JVM modules.
+subprojects {
+    plugins.withId("com.android.library") {
+        dependencies.add("bcv-rt-jvm-cp", "org.jetbrains.kotlin:kotlin-metadata-jvm:${libs.versions.kotlin.get()}")
+        extensions.configure<LibraryAndroidComponentsExtension> {
+            onVariants(selector().withBuildType("release")) { variant ->
+                val aar = variant.artifacts.get(SingleArtifact.AAR)
+                val extractClasses = tasks.register<Sync>("extractReleaseApiClasses") {
+                    from(aar.map { zipTree(it) }) { include("classes.jar") }
+                    into(layout.buildDirectory.dir("api-input"))
+                }
+                val apiBuild = tasks.register<KotlinApiBuildTask>("apiBuild") {
+                    dependsOn(extractClasses)
+                    inputJar.set(layout.buildDirectory.file("api-input/classes.jar"))
+                    outputApiFile.set(layout.buildDirectory.file("api/${project.name}.api"))
+                    runtimeClasspath.from(configurations.named("bcv-rt-jvm-cp-resolver"))
+                }
+                val apiCheck = tasks.register<KotlinApiCompareTask>("apiCheck") {
+                    group = "verification"
+                    projectApiFile.set(layout.projectDirectory.file("api/${project.name}.api"))
+                    generatedApiFile.set(apiBuild.flatMap { it.outputApiFile })
+                }
+                tasks.register<Copy>("apiDump") {
+                    from(apiBuild.flatMap { it.outputApiFile })
+                    into(layout.projectDirectory.dir("api"))
+                }
+                tasks.named("check") { dependsOn(apiCheck) }
+            }
         }
     }
 }

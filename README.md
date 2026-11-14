@@ -15,6 +15,23 @@ The headless core, Android connection layer and interactive video view exist. Th
 
 `:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; all code lives in `commonMain`. `:stream-android` is an Android library (minSdk 24, compileSdk 36, JVM 17).
 
+## Installation (after first release)
+
+These coordinates are reserved for the first Maven Central release; they are not available yet.
+With `mavenCentral()` configured, use:
+
+```kotlin
+dependencies {
+    implementation("ai.mobilerun:mobilerun-stream-android:0.1.0")
+    // Optional Compose UI; includes the Android streaming module transitively.
+    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+}
+```
+
+Android requires minSdk 24 and JDK 17. For headless JVM use, choose
+`ai.mobilerun:mobilerun-stream-core:0.1.0`; Gradle selects its JVM variant.
+See [RELEASING.md](RELEASING.md) for artifact details and the release checklist.
+
 ## Streaming a device
 
 ```kotlin

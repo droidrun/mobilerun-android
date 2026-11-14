@@ -23,4 +23,4 @@ jobs:
           python3 tool/generate-constants.py
           git diff --exit-code -- protocol/src/commonMain/kotlin/ai/mobilerun/stream/protocol/Constants.kt
       - name: Check
-        run: ./gradlew check --no-daemon
+        run: ./gradlew check apiCheck --no-daemon
