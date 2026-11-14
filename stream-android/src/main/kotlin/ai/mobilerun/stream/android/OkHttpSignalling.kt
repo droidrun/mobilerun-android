@@ -15,8 +15,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-private const val NORMAL_CLOSURE = 1000
-
 /** The WebSocket URL with the token as the `token` query parameter (replacing an existing one). */
 internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
     // OkHttp only knows http(s); it upgrades to ws(s) itself.
@@ -47,8 +45,8 @@ internal class OkHttpSignallingTransport(private val listener: SignallingListene
 
     override fun close() {
         finished = true
-        // OkHttp cancels a close the peer never answers by itself.
-        socket.close(NORMAL_CLOSURE, null)
+        // Teardown must not retain the session while waiting for a peer's CLOSE reply.
+        socket.cancel()
     }
 
     override fun onOpen(webSocket: WebSocket, response: Response) {

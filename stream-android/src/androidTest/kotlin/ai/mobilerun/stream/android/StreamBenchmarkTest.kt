@@ -30,6 +30,55 @@ class StreamBenchmarkTest {
     private val args = InstrumentationRegistry.getArguments()
     private fun ui(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
+    /** Captures only parser inputs: identifiers are replaced, and addresses/certificates are omitted. */
+    @Test fun recordNativeReports() = runBlocking {
+        val output = File(context.filesDir, "e2e-out").also { it.mkdirs() }
+        val device = E2eDevice.load(context)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        lateinit var session: DeviceStreamSession
+        lateinit var peer: WebRtcPeerTransport
+        val factory = ai.mobilerun.stream.core.PeerTransportFactory { configuration, channels, listener ->
+            WebRtcPeerTransportFactory({ WebRtcRuntime.factory(context) }, session.media,
+                VideoCodecPreference.Auto).create(configuration, channels, listener).also {
+                peer = it as WebRtcPeerTransport
+            }
+        }
+        session = DeviceStreamSession(context, { device.credentials }, scope, StreamConfig(), device.signalling, factory)
+        val fields = setOf("kind", "mediaType", "transportId", "codecId", "frameWidth", "frameHeight",
+            "framesPerSecond", "bytesReceived", "framesDecoded", "jitterBufferDelay", "jitterBufferEmittedCount",
+            "totalDecodeTime", "packetsLost", "framesDropped", "freezeCount", "selectedCandidatePairId",
+            "localCandidateId", "remoteCandidateId", "currentRoundTripTime", "candidateType", "mimeType", "selected")
+        val references = setOf("transportId", "codecId", "selectedCandidatePairId", "localCandidateId", "remoteCandidateId")
+        val types = setOf("inbound-rtp", "transport", "candidate-pair", "local-candidate", "remote-candidate", "codec")
+        val aliases = mutableMapOf<String, String>()
+        fun alias(id: String): String = aliases.getOrPut(id) { "r${aliases.size}" }
+        try {
+            session.start()
+            device.awaitConnectedWithVideo(session)
+            delay(2000)
+            val reports = JSONArray()
+            repeat(2) {
+                val report = withTimeout(10_000) { peer.statsReport() }
+                val json = JSONObject()
+                report.statsMap.values.filter { it.type in types }.forEach { record ->
+                    val members = JSONObject()
+                    record.members.filterKeys { it in fields }.forEach { (key, value) ->
+                        members.put(key, if (key in references && value is String) alias(value) else value)
+                    }
+                    json.put(alias(record.id), JSONObject().put("type", record.type)
+                        .put("timestampUs", record.timestampUs).put("members", members))
+                }
+                reports.put(json)
+                delay(1000)
+            }
+            File(output, "rtc-stats-native.json").writeText(reports.toString(2))
+            File(output, "native-frame.png").writeBytes(session.screenshot())
+        } finally {
+            session.close()
+            scope.cancel()
+        }
+    }
+
     private suspend fun renderedFrame(renderer: SurfaceViewRenderer): Bitmap {
         val ready = CompletableDeferred<Bitmap>()
         val listener = EglRenderer.FrameListener { bitmap ->
@@ -72,10 +121,15 @@ class StreamBenchmarkTest {
         session.sendControl(ControlMessages.keycode(0, 3))
         session.sendControl(ControlMessages.keycode(1, 3))
         delay(1500)
-        val baseline = luma(renderer)
-        repeat(4) {
-            delay(100)
-            assertTrue(abs(luma(renderer) - baseline) < 1.0, "latency region must be stable before input")
+        var baseline = luma(renderer)
+        withTimeout(10_000) {
+            var stable = 0
+            while (stable < 4) {
+                delay(100)
+                val next = luma(renderer)
+                stable = if (abs(next - baseline) < 1.0) stable + 1 else 0
+                baseline = next
+            }
         }
         val size = assertNotNull(session.videoSize.value)
         val x = requireNotNull(args.getString("tapX")) { "tapX must select a harmless launcher icon" }.toDouble()

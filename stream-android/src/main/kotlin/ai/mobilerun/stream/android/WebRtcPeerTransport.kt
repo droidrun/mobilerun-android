@@ -76,11 +76,7 @@ internal class WebRtcPeerTransport(
         if (statsJob?.isActive == true || closed) return
         statsJob = scope.launch {
             while (isActive && !closed) {
-                val report = suspendCancellableCoroutine<RTCStatsReport> { continuation ->
-                    peerConnection.getStats { report ->
-                        if (continuation.isActive) continuation.resume(report)
-                    }
-                }
+                val report = statsReport()
                 if (!closed && connectionState == PeerConnectionState.Connected) {
                     media.stats.value = statsParser.parse(report.statsMap.values.map {
                         StatsRecord(it.id, it.type, it.timestampUs, it.members)
@@ -88,6 +84,13 @@ internal class WebRtcPeerTransport(
                 }
                 delay(1000)
             }
+        }
+    }
+
+    /** Native report access for the sampler and instrumentation recording. */
+    internal suspend fun statsReport(): RTCStatsReport = suspendCancellableCoroutine { continuation ->
+        peerConnection.getStats { report ->
+            if (continuation.isActive) continuation.resume(report)
         }
     }
 

@@ -71,7 +71,7 @@ public class DeviceStreamSession internal constructor(
     )
 
     private val appContext = context.applicationContext
-    private val media = StreamMedia(config.muted)
+    internal val media = StreamMedia(config.muted)
     private val engine = StreamSessionEngine(
         scope = scope,
         credentials = credentials,

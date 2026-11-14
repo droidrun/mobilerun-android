@@ -13,6 +13,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -143,6 +144,26 @@ class OkHttpSignallingTest {
         repeat(3) { runCatching { serverSocket?.send("more") } }
         val remaining = generateSequence { events.poll(300, TimeUnit.MILLISECONDS) }.toList()
         assertTrue(remaining.none { it == "closed" || it.startsWith("failure") }, "events after close: $remaining")
+    }
+
+    @Test
+    fun closeReleasesSocketWithoutWaitingForServerAck() {
+        val terminated = CountDownLatch(1)
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket = webSocket }
+            // Deliberately leave a graceful CLOSE unanswered.
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = Unit
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                terminated.countDown()
+            }
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                terminated.countDown()
+            }
+        }))
+        val transport = open(credentials())
+        assertEquals("open", next(events))
+        transport.close()
+        assertTrue(terminated.await(2, TimeUnit.SECONDS), "close must release an unacknowledged socket promptly")
     }
 
     @Test

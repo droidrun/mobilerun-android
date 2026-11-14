@@ -10,7 +10,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class StreamStatsParserTest {
-    private val reports = Json.parseToJsonElement(requireNotNull(javaClass.getResource("/rtc-stats.json")).readText())
+    private val reports = readReports("/rtc-stats.json")
+
+    private fun readReports(name: String): List<List<StatsRecord>> =
+        Json.parseToJsonElement(requireNotNull(javaClass.getResource(name)).readText())
         .jsonArray.map { report -> report.jsonObject.map { (id, element) ->
             val value = element.jsonObject
             StatsRecord(id, value.getValue("type").jsonPrimitive.content,
@@ -20,6 +23,25 @@ class StreamStatsParserTest {
                     if (primitive.isString) primitive.content else primitive.booleanOrNull ?: primitive.double
                 })
         } }
+
+    @Test fun recordedNativeReportsUseCounterIntervalsAndSelectedPair() {
+        val reports = readReports("/rtc-stats-native.json")
+        val parser = StreamStatsParser()
+        assertNull(parser.parse(reports[0], 123.0).bitrateKbps)
+        val sample = parser.parse(reports[1], 123.0)
+        assertEquals(59.0, sample.fps)
+        assertEquals(488, sample.width)
+        assertEquals(1080, sample.height)
+        assertEquals("video/H265", sample.codec)
+        assertEquals(19.0, sample.rttMs)
+        assertEquals("relay/prflx", sample.candidateType)
+        assertEquals(52_704.0 / 1016.954, requireNotNull(sample.bitrateKbps), 1e-6)
+        assertEquals(9.503 / 61, requireNotNull(sample.jitterBufferDelayMs), 1e-6)
+        assertEquals(262.0 / 60, requireNotNull(sample.decodeTimeMs), 1e-6)
+        assertEquals(0, sample.packetsLost)
+        assertEquals(2, sample.framesDropped)
+        assertEquals(0, sample.freezeCount)
+    }
 
     @Test fun recordedReportsUseSelectedPairAndVideoCounterDeltas() {
         val parser = StreamStatsParser()
