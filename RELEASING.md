@@ -1,7 +1,8 @@
 # Releasing to Maven Central
 
 No artifacts have been published yet. The PR workflow builds unsigned publications in Maven Local;
-it never uploads to Central. Only pushing a release tag starts a signed Central release.
+it never uploads to Central. A release tag pointing to a commit on `main` starts a signed Central
+upload; publication requires a separate approval in the Central Portal.
 
 ## One-time setup
 
@@ -14,10 +15,7 @@ The repository owner must complete these steps before the first release:
    Keep the private key and its password in a password manager.
 3. Generate a Central Portal **user token**. Its username/password are publishing credentials,
    distinct from the account login.
-4. Add the following repository Actions secrets. Transfer each value directly through the clipboard
-   into the secret field; never paste values into chat, terminal output, command arguments or files
-   in the repository. Clear the clipboard after each transfer. Export the full ASCII-armored private
-   signing key directly to the clipboard using a secure local export flow, without printing it.
+4. Add the four values under Settings → Secrets and variables → Actions; never commit them.
 
    | Secret | Value |
    |---|---|
@@ -26,20 +24,23 @@ The repository owner must complete these steps before the first release:
    | `SIGNING_IN_MEMORY_KEY` | Complete ASCII-armored private GPG key, including header/footer |
    | `SIGNING_IN_MEMORY_KEY_PASSWORD` | GPG private-key password |
 
-5. Make the repository public and confirm the source, Apache-2.0 license and SCM URL are accessible.
-   Review repository contents and history before changing visibility.
+5. Recommended: create a protected `maven-central` environment with a release-tag rule and a
+   required reviewer. Set `environment: maven-central` on the upload job when that environment is
+   configured, and store its publishing secrets there to require approval before upload.
+6. Decide whether to make the repository public. Repository visibility is the owner's decision,
+   not a Maven Central requirement. Ensure the published POM's project/license/SCM links are suitable.
 
-Missing secrets cause the tag workflow to fail before any build or upload. A tag is an instruction
-to publish: do not push one until namespace ownership, signing and visibility are ready.
+Missing secrets cause the tag workflow to fail before any build or upload. Do not push a release tag
+until namespace ownership and signing are ready.
 
 ## Each release
 
 1. Set `VERSION_NAME` in `gradle.properties` to a release version such as `0.1.0` (no `-SNAPSHOT`).
-   All modules use this single version.
+   All modules use this single version. Update the README installation examples to match.
 2. For deliberate public API changes, run `./gradlew apiDump`, inspect the dump diff and commit it
-   with the change. `./gradlew apiCheck` compares the public signatures with the committed baseline.
+   with the change. `check` compares public signatures with the committed baseline.
    Declarations marked `InternalStreamApi` are excluded from this contract.
-3. Run `./gradlew check apiCheck publishToMavenLocal --no-configuration-cache`.
+3. Run `./gradlew check publishToMavenLocal`.
    Inspect the artifacts under the Maven Local `ai/mobilerun` group. Merge the release-version PR
    only after CI and its unsigned publication dry run pass.
 4. From the merged commit on `main`, create and push the matching tag:
@@ -51,10 +52,13 @@ to publish: do not push one until namespace ownership, signing and visibility ar
 
    The workflow rejects a tag that differs from `VERSION_NAME` or contains a snapshot/prerelease
    version. It checks the API, tests and lint, signs all publications, then runs
-   `./gradlew publishAndReleaseToMavenCentral --no-configuration-cache`.
-5. Check the Actions run and Central Portal deployment. Central may take time to index the release.
-   Verify resolution from `mavenCentral()` before announcing it. Published versions are immutable;
-   diagnose a failed upload in the portal before retrying, and never overwrite a released version.
+   `./gradlew publishToMavenCentral` to upload and validate without automatically releasing.
+5. Check the Actions run and inspect the validated deployment in the Central Portal, including its
+   coordinates, signatures and artifacts. Press **Publish** in the Central Portal when satisfied.
+   Central may take time to index the release; verify resolution from `mavenCentral()` before
+   announcing it. Published versions are immutable; diagnose failed uploads before retrying.
+   Later releases may switch to `publishAndReleaseToMavenCentral` for automatic publication.
+
 6. Set `VERSION_NAME` to the next development version ending in `-SNAPSHOT` in a follow-up PR.
 
 ## Coordinates and artifacts

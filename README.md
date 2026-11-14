@@ -204,9 +204,9 @@ closing the controller cancels its work. Subscription, unsubscribe and error-han
 crash the host.
 
 `PendingApproval.paymentCardDetails()` validates only payment-card kinds.
-`parsePaymentCardDetails` accepts a nonempty label (falling back to credentialName), targetPackage
-and optional targetHost, ignoring wrongly typed optional fields. `remainingMs` and `formatRemaining`
-match React's countdown utilities. The card's isolated one-second countdown stops ticking at expiry and is display only: **the backend
+`paymentCardDetails()` accepts a nonempty label (falling back to credentialName), targetPackage
+and optional targetHost, ignoring wrongly typed optional fields. The card's isolated one-second
+countdown stops ticking at expiry and is display only: **the backend
 decides expiry and permission**. Expired approvals still forward decisions. The optional device slot
 appears beside details on wide layouts; narrow layouts switch Details/Device while retaining the
 slot's composition, including when resizing across the 768 dp breakpoint. The approval actions are independently replaceable.

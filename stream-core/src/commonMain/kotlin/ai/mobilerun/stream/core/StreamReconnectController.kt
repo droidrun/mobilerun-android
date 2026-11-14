@@ -34,6 +34,7 @@ public enum class StreamReconnectStatus {
 public data class StreamReconnectSnapshot(val status: StreamReconnectStatus, val attempt: Int)
 
 /** A timer returned by [ReconnectScheduler.schedule]. */
+@InternalStreamApi
 public fun interface ScheduledTask {
     /** Cancels the timer. Must be harmless if it already fired or was cancelled. */
     public fun cancel()
@@ -43,6 +44,7 @@ public fun interface ScheduledTask {
  * Source of time for the controller. The core owns no real timers: the embedding app supplies
  * one backed by its main loop, and tests supply a fake clock.
  */
+@InternalStreamApi
 public fun interface ReconnectScheduler {
     /**
      * Runs [action] once after [delayMs] milliseconds. Timers due at the same time must fire in the

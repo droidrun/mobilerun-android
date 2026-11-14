@@ -77,6 +77,7 @@ public fun PendingApproval.paymentCardDetails(): PaymentCardDetails? =
     if (kind == PAYMENT_CARD_KIND) parsePaymentCardDetails(details) else null
 
 /** Wrong-typed optional values count as absent; missing card/package makes details invalid. */
+@InternalStreamApi
 public fun parsePaymentCardDetails(details: Any?): PaymentCardDetails? {
     val fields = details as? Map<*, *> ?: return null
     fun text(key: String): String? = (fields[key] as? String)?.takeIf { it.isNotEmpty() }
@@ -88,10 +89,12 @@ public fun parsePaymentCardDetails(details: Any?): PaymentCardDetails? {
 }
 
 /** Milliseconds until an ISO-8601 deadline, negative once past, zero for an invalid date. Display only. */
+@InternalStreamApi
 public fun remainingMs(expiresAt: String, nowMs: Long): Long =
     try { Instant.parse(expiresAt).toEpochMilliseconds() - nowMs } catch (_: IllegalArgumentException) { 0L }
 
 /** Rounded up seconds: "45s", "4m 58s", "1h 2m 5s". Negative values clamp to zero. */
+@InternalStreamApi
 public fun formatRemaining(ms: Long): String {
     val total = ceil(ms.coerceAtLeast(0).toDouble() / 1000).toLong()
     val hours = total / 3600

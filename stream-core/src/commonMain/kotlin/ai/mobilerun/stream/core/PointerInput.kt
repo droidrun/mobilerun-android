@@ -63,6 +63,7 @@ public class PointerInput(private val send: (ByteArray) -> Unit) {
         active.keys.toList().forEach(::cancel)
     }
 
+    @InternalStreamApi
     public companion object {
         /** Mouse pointer id on every input channel. */
         public const val MOUSE_ID: Int = -1

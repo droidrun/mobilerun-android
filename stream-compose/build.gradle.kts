@@ -26,7 +26,10 @@ android {
 kotlin {
     explicitApi()
     jvmToolchain(17)
-    compilerOptions { allWarningsAsErrors.set(true) }
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+    }
 }
 
 dependencies {

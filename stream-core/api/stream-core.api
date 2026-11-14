@@ -11,10 +11,6 @@ public abstract interface class ai/mobilerun/stream/core/ApprovalSubscription {
 	public abstract fun subscribe (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Ljava/lang/AutoCloseable;
 }
 
-public final class ai/mobilerun/stream/core/InputGeometry$Companion {
-	public final fun fit (IILai/mobilerun/stream/core/VideoSize;)Lai/mobilerun/stream/core/InputGeometry;
-}
-
 public abstract interface annotation class ai/mobilerun/stream/core/InternalStreamApi : java/lang/annotation/Annotation {
 }
 
@@ -42,25 +38,9 @@ public final class ai/mobilerun/stream/core/PendingApproval {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class ai/mobilerun/stream/core/PointerInput$Companion {
-}
-
 public final class ai/mobilerun/stream/core/ReconnectPolicy {
-	public static final field BASE_DELAY_MS J
-	public static final field CONNECT_TIMEOUT_MS J
 	public static final field INSTANCE Lai/mobilerun/stream/core/ReconnectPolicy;
 	public static final field MAX_ATTEMPTS I
-	public static final field MAX_DELAY_MS J
-	public static final field STABILITY_MS J
-	public final fun delayMs (ID)J
-}
-
-public abstract interface class ai/mobilerun/stream/core/ReconnectScheduler {
-	public abstract fun schedule (JLkotlin/jvm/functions/Function0;)Lai/mobilerun/stream/core/ScheduledTask;
-}
-
-public abstract interface class ai/mobilerun/stream/core/ScheduledTask {
-	public abstract fun cancel ()V
 }
 
 public final class ai/mobilerun/stream/core/ScreenshotFailedException : java/lang/RuntimeException {
@@ -141,10 +121,7 @@ public final class ai/mobilerun/stream/core/TaskApprovalController {
 }
 
 public final class ai/mobilerun/stream/core/TaskApprovalKt {
-	public static final fun formatRemaining (J)Ljava/lang/String;
-	public static final fun parsePaymentCardDetails (Ljava/lang/Object;)Lai/mobilerun/stream/core/PaymentCardDetails;
 	public static final fun paymentCardDetails (Lai/mobilerun/stream/core/PendingApproval;)Lai/mobilerun/stream/core/PaymentCardDetails;
-	public static final fun remainingMs (Ljava/lang/String;J)J
 }
 
 public final class ai/mobilerun/stream/core/TaskApprovalState {

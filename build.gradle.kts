@@ -46,21 +46,17 @@ subprojects {
             systemProperty("conformance.fixtures", fixtures.asFile.absolutePath)
         }
     }
-}
 
-// All published modules share coordinates and Central-required metadata.
-subprojects {
-    group = providers.gradleProperty("GROUP").get()
-    version = providers.gradleProperty("VERSION_NAME").get()
+    // All published modules share Central-required metadata.
     plugins.withId("com.vanniktech.maven.publish") {
         extensions.configure<MavenPublishBaseExtension> {
             val artifactId = if (project.name == "protocol") "mobilerun-stream-protocol" else "mobilerun-${project.name}"
-            coordinates(group.toString(), artifactId, version.toString())
+            coordinates(artifactId = artifactId)
             publishToMavenCentral()
             // The plugin reads signAllPublications: release CI enables it; local/PR builds do not.
             pom {
-                name.set("Mobilerun ${project.name}")
-                description.set("Mobilerun device streaming: ${project.name} module")
+                name.set(artifactId)
+                description.set("Mobilerun device streaming: $artifactId")
                 url.set("https://github.com/droidrun/mobilerun-android")
                 licenses {
                     license {
@@ -84,16 +80,12 @@ subprojects {
             }
         }
     }
-}
 
-apiValidation {
-    nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
-}
-
-// BCV 0.18.2 detects the legacy Kotlin Android plugin, not AGP's built-in Kotlin.
-// Validate the actual release AAR classes with the same validator used for the JVM modules.
-subprojects {
+    // BCV 0.18.2 detects the legacy Kotlin Android plugin, not AGP's built-in Kotlin.
+    // Validate release AAR classes with the same validator used for JVM modules.
     plugins.withId("com.android.library") {
+        // BCV's internal dependency bucket/resolver are pinned to validator 0.18.2.
+        // Built-in Kotlin needs its metadata reader added to that worker classpath explicitly.
         dependencies.add("bcv-rt-jvm-cp", "org.jetbrains.kotlin:kotlin-metadata-jvm:${libs.versions.kotlin.get()}")
         extensions.configure<LibraryAndroidComponentsExtension> {
             onVariants(selector().withBuildType("release")) { variant ->
@@ -103,8 +95,7 @@ subprojects {
                     into(layout.buildDirectory.dir("api-input"))
                 }
                 val apiBuild = tasks.register<KotlinApiBuildTask>("apiBuild") {
-                    dependsOn(extractClasses)
-                    inputJar.set(layout.buildDirectory.file("api-input/classes.jar"))
+                    inputJar.fileProvider(extractClasses.map { it.destinationDir.resolve("classes.jar") })
                     outputApiFile.set(layout.buildDirectory.file("api/${project.name}.api"))
                     runtimeClasspath.from(configurations.named("bcv-rt-jvm-cp-resolver"))
                 }
@@ -121,4 +112,12 @@ subprojects {
             }
         }
     }
+}
+
+apiValidation {
+    nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
+    ignoredClasses.addAll(listOf(
+        "ai.mobilerun.stream.compose.ComposableSingletons\$DeviceStreamKt",
+        "ai.mobilerun.stream.compose.ComposableSingletons\$TaskApprovalKt",
+    ))
 }

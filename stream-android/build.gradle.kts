@@ -38,7 +38,6 @@ kotlin {
 }
 
 dependencies {
-    api(project(":protocol"))
     api(project(":stream-core"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)

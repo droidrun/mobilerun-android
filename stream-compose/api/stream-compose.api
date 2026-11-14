@@ -6,23 +6,6 @@ public final class ai/mobilerun/stream/compose/ApprovalActionsState {
 	public final fun isPending ()Z
 }
 
-public final class ai/mobilerun/stream/compose/ComposableSingletons$DeviceStreamKt {
-	public static final field INSTANCE Lai/mobilerun/stream/compose/ComposableSingletons$DeviceStreamKt;
-	public fun <init> ()V
-	public final fun getLambda$-1457739409$stream_compose ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$-1577819963$stream_compose ()Lkotlin/jvm/functions/Function5;
-	public final fun getLambda$-547104050$stream_compose ()Lkotlin/jvm/functions/Function5;
-	public final fun getLambda$-96476160$stream_compose ()Lkotlin/jvm/functions/Function5;
-	public final fun getLambda$220988307$stream_compose ()Lkotlin/jvm/functions/Function5;
-}
-
-public final class ai/mobilerun/stream/compose/ComposableSingletons$TaskApprovalKt {
-	public static final field INSTANCE Lai/mobilerun/stream/compose/ComposableSingletons$TaskApprovalKt;
-	public fun <init> ()V
-	public final fun getLambda$-1451090179$stream_compose ()Lkotlin/jvm/functions/Function3;
-	public final fun getLambda$949852139$stream_compose ()Lkotlin/jvm/functions/Function2;
-}
-
 public final class ai/mobilerun/stream/compose/DeviceStreamKt {
 	public static final fun DeviceStream (Lai/mobilerun/stream/android/DeviceStreamSession;Landroidx/compose/ui/Modifier;ZLai/mobilerun/stream/compose/StreamLabels;ZLkotlin/jvm/functions/Function5;Lkotlin/jvm/functions/Function5;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
 }
