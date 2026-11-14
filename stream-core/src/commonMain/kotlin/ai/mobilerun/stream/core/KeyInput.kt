@@ -48,9 +48,10 @@ public object KeyInput {
             keycode in controlKeycodes || shortcut -> send(ControlMessages.keycode(
                 if (down) AndroidKeys.ACTION_DOWN else AndroidKeys.ACTION_UP, keycode, metaState = meta,
             ))
-            down && text != null && text.length == 1 && !text[0].isISOControl() ->
-                send(ControlMessages.text(text))
-            down -> send(ControlMessages.keycode(AndroidKeys.ACTION_DOWN, keycode, metaState = meta))
+            text != null && text.length == 1 -> if (down) send(ControlMessages.text(text))
+            else -> send(ControlMessages.keycode(
+                if (down) AndroidKeys.ACTION_DOWN else AndroidKeys.ACTION_UP, keycode, metaState = meta,
+            ))
         }
         return true
     }

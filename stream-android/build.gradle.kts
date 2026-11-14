@@ -41,6 +41,7 @@ dependencies {
     api(project(":stream-core"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
+    implementation(libs.androidx.lifecycle.process)
     // The OkHttpClient is part of StreamConfig.
     api(libs.okhttp)
 

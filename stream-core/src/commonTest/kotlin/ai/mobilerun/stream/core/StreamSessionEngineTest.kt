@@ -67,7 +67,8 @@ private class Harness(
         credentials = {
             credentialCalls += 1
             gate?.await()
-            nextError?.let { nextError = null; throw it }
+            nextError?.let { nextError = null
+            throw it }
             next
         },
         signalling = signalling,
@@ -116,6 +117,20 @@ private class Harness(
         settle()
         advance(ReconnectPolicy.delayMs(attempt, 0.5))
     }
+    suspend fun exhaustRetries() {
+        engine.start()
+        settle()
+        for (attempt in 1..ReconnectPolicy.MAX_ATTEMPTS) {
+            socket.serverCloses()
+            settle()
+            assertEquals(StreamStatus.Reconnecting(attempt), status)
+            advance(ReconnectPolicy.delayMs(attempt, 0.5))
+        }
+        socket.serverCloses()
+        settle()
+        assertEquals(StreamStatus.Unavailable, status)
+    }
+
 }
 
 class StreamSessionEngineTest {
@@ -436,18 +451,7 @@ class StreamSessionEngineTest {
     @Test
     fun retryBudgetIsSpentThenRetryStartsAgain() = runTest {
         val h = Harness(this)
-        h.engine.start()
-        h.settle()
-        for (attempt in 1..ReconnectPolicy.MAX_ATTEMPTS) {
-            h.socket.serverCloses()
-            h.settle()
-            assertEquals(StreamStatus.Reconnecting(attempt), h.status)
-            h.advance(ReconnectPolicy.delayMs(attempt, 0.5))
-            assertEquals(attempt + 1, h.signalling.sockets.size)
-        }
-        h.socket.serverCloses()
-        h.settle()
-        assertEquals(StreamStatus.Unavailable, h.status)
+        h.exhaustRetries()
         val before = h.signalling.sockets.size
         h.advance(120_000)
         assertEquals(before, h.signalling.sockets.size)
@@ -456,6 +460,59 @@ class StreamSessionEngineTest {
         h.settle()
         assertEquals(before + 1, h.signalling.sockets.size)
         assertEquals(StreamStatus.Reconnecting(0), h.status)
+    }
+
+    @Test
+    fun hiddenHostPausesKeepAliveAndForegroundResumes() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.engine.setHostVisible(false)
+        h.settle()
+        h.advance(20_000)
+        assertTrue(h.socket.framesOf("keepAlive").isEmpty())
+        h.engine.setHostVisible(true)
+        h.settle()
+        h.advance(10_000)
+        assertEquals(1, h.socket.framesOf("keepAlive").size)
+    }
+
+    @Test
+    fun wakeShortCircuitsBackoff() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.socket.serverCloses()
+        h.settle()
+        val before = h.signalling.sockets.size
+        h.engine.handleWake()
+        h.settle()
+        assertEquals(before + 1, h.signalling.sockets.size)
+    }
+
+    @Test
+    fun wakeNeverStartsOrRevivesClosedSession() = runTest {
+        val h = Harness(this)
+        h.engine.handleWake()
+        h.settle()
+        assertTrue(h.signalling.sockets.isEmpty())
+        h.connect()
+        val before = h.signalling.sockets.size
+        h.engine.close()
+        h.settle()
+        h.engine.handleWake()
+        h.engine.setHostVisible(true)
+        h.settle()
+        h.advance(60_000)
+        assertEquals(before, h.signalling.sockets.size)
+    }
+
+    @Test
+    fun wakeRevivesUnavailableSession() = runTest {
+        val h = Harness(this)
+        h.exhaustRetries()
+        val before = h.signalling.sockets.size
+        h.engine.handleWake()
+        h.settle()
+        assertEquals(before + 1, h.signalling.sockets.size)
     }
 
     // ---- credentials ----
@@ -512,7 +569,9 @@ class StreamSessionEngineTest {
         val h = Harness(this, first = null)
         h.engine.start()
         h.settle()
-        h.advance(2 * CREDENTIALS_POLL_INTERVAL_MS)
+        h.advance(2_999)
+        assertEquals(1, h.credentialCalls)
+        h.advance(3_001)
         assertEquals(3, h.credentialCalls) // t = 0, 1 and 2 intervals
         assertTrue(h.signalling.sockets.isEmpty())
         assertEquals(StreamStatus.Connecting, h.status)

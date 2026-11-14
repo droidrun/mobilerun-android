@@ -25,7 +25,10 @@ class StreamInputConnectionTest {
     private var active = true
     private var keyEvents = 0
     private val connection = StreamInputConnection(View(RuntimeEnvironment.getApplication()),
-        active = { active }, send = { messages += it }, key = { keyEvents++; true })
+        active = { active }, send = { messages += it }, key = {
+            keyEvents++
+            true
+        })
 
     @Test
     fun compositionIsLocalAndOnlyCommittedTextIsSent() {
@@ -105,4 +108,16 @@ class StreamInputConnectionTest {
         assertTrue(connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)))
         assertEquals(1, keyEvents)
     }
+    @Test
+    fun committedControlsUseEditingKeysAndDropOtherControls() {
+        connection.commitText("a\tb\nc\r\u0000\u001b\u007fd", 1)
+        messages.assertSent(
+            ControlMessages.text("a"),
+            ControlMessages.keycode(0, 61), ControlMessages.keycode(1, 61),
+            ControlMessages.text("b"),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+            ControlMessages.text("cd"),
+        )
+    }
+
 }

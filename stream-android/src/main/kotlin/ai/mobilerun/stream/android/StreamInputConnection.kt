@@ -31,11 +31,21 @@ internal class StreamInputConnection(
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         if (!canSend()) return false
-        val parts = text?.toString()?.replace("\r\n", "\n")?.replace('\r', '\n')?.split('\n') ?: emptyList()
-        parts.forEachIndexed { index, part ->
-            if (index > 0) KeyInput.press(AndroidKeys.ENTER, send)
-            if (part.isNotEmpty()) send(ControlMessages.text(part))
+        val chunk = StringBuilder()
+        fun flush() {
+            if (chunk.isNotEmpty()) send(ControlMessages.text(chunk.toString()))
+            chunk.clear()
         }
+        for (character in (text ?: "")) {
+            when {
+                character == '\n' || character == '\t' -> {
+                    flush()
+                    KeyInput.press(if (character == '\n') AndroidKeys.ENTER else KeyEvent.KEYCODE_TAB, send)
+                }
+                !character.isISOControl() -> chunk.append(character)
+            }
+        }
+        flush()
         buffer.clear()
         removeComposingSpans(buffer)
         return true

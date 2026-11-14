@@ -15,8 +15,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -29,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.concurrent.Volatile
-import kotlin.coroutines.ContinuationInterceptor
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
 import kotlin.time.Duration
@@ -37,7 +34,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /** How often the credentials provider is asked again while it keeps returning `null`. */
-internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 2_000
+internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
 
 /**
  * The connection logic of one device stream, independent of any platform: it drives a
@@ -106,6 +103,7 @@ public class StreamSessionEngine(
 
     private val closed: Boolean get() = !engineJob.isActive
     private var started = false
+    private var hostVisible = true
 
     // The newest credentials the provider returned, and the ones the live connection was opened with.
     private var latestTarget: StreamCredentials? = null
@@ -147,6 +145,16 @@ public class StreamSessionEngine(
     /** Starts a fresh reconnect cycle after the stream became [StreamStatus.Unavailable]; otherwise does nothing. */
     public fun retry() {
         engineScope.launchGuarded { controller.retry() }
+    }
+
+    /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
+    public fun setHostVisible(visible: Boolean) {
+        engineScope.launchGuarded { hostVisible = visible }
+    }
+
+    /** Foreground/network recovery. A closed or not-yet-started session is never started by wake. */
+    public fun handleWake() {
+        engineScope.launchGuarded { if (started) controller.handleWake() }
     }
 
     /** Stops the session; its connection is released shortly after. Afterwards nothing happens anymore. */
@@ -329,7 +337,7 @@ public class StreamSessionEngine(
             scope.launchGuarded {
                 while (true) {
                     delay(SignallingTiming.KEEP_ALIVE_INTERVAL_MS)
-                    if (isCurrent && wsOpen) send(ClientMessage.KeepAlive(sessionId))
+                    if (isCurrent && wsOpen && hostVisible) send(ClientMessage.KeepAlive(sessionId))
                 }
             }
         }
@@ -625,13 +633,6 @@ internal fun decodeDataUri(dataUri: String): ByteArray {
 internal fun randomSessionId(): String {
     val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
     return buildString { repeat(24) { append(alphabet[Random.nextInt(alphabet.length)]) } }
-}
-
-// The engine's own serial context: its state is only touched from there.
-@OptIn(ExperimentalCoroutinesApi::class)
-private fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
-    val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
-    return base.limitedParallelism(1)
 }
 
 private fun monotonicMillis(): () -> Long {

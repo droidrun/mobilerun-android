@@ -74,8 +74,14 @@ class DeviceStreamViewTest {
             candidate: String, sdpMid: String?, sdpMLineIndex: Int?,
         ) = Unit
         override fun setIceServers(iceServers: List<IceServer>) = true
-        override fun sendControl(bytes: ByteArray): Boolean { control += bytes; return true }
-        override fun sendHover(bytes: ByteArray): Boolean { hover += bytes; return true }
+        override fun sendControl(bytes: ByteArray): Boolean {
+            control += bytes
+            return true
+        }
+        override fun sendHover(bytes: ByteArray): Boolean {
+            hover += bytes
+            return true
+        }
         override fun close() = Unit
     }
 
@@ -146,7 +152,9 @@ class DeviceStreamViewTest {
             toolType = if (mouse) MotionEvent.TOOL_TYPE_MOUSE else MotionEvent.TOOL_TYPE_FINGER
         } }.toTypedArray()
         val coordinates = points.map { (px, py) -> MotionEvent.PointerCoords().apply {
-            x = px; y = py; pressure = 1f
+            x = px
+            y = py
+            pressure = 1f
             setAxisValue(MotionEvent.AXIS_HSCROLL, horizontal)
             setAxisValue(MotionEvent.AXIS_VSCROLL, vertical)
         } }.toTypedArray()
@@ -213,8 +221,8 @@ class DeviceStreamViewTest {
         assertFalse(view.onKeyDown(KeyEvent.KEYCODE_BACK, KeyEvent(0, KeyEvent.KEYCODE_BACK)))
         val info = EditorInfo()
         val input = assertNotNull(view.onCreateInputConnection(info))
-        assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, info.inputType)
+        assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, info.inputType)
+        assertTrue(info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0)
         input.setComposingText("hello", 1)
         input.finishComposingText()
         input.deleteSurroundingText(1, 0)

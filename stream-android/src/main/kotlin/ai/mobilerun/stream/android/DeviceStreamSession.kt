@@ -105,6 +105,12 @@ public class DeviceStreamSession internal constructor(
     /** Starts a new cycle after [StreamStatus.Unavailable]; otherwise does nothing. */
     public fun retry(): Unit = engine.retry()
 
+    /** Pauses keep-alive messages while the host is hidden; does not end the session. */
+    public fun setHostVisible(visible: Boolean): Unit = engine.setHostVisible(visible)
+
+    /** Retries a pending recovery immediately, or revives an unavailable session. Never starts a closed session. */
+    public fun handleWake(): Unit = engine.handleWake()
+
     /** Releases the connection, channels and video. A closed session cannot be restarted. */
     public fun close() {
         engine.close()
