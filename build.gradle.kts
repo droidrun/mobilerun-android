@@ -57,10 +57,7 @@ subprojects {
             val artifactId = if (project.name == "protocol") "mobilerun-stream-protocol" else "mobilerun-${project.name}"
             coordinates(group.toString(), artifactId, version.toString())
             publishToMavenCentral()
-            // Local/PR builds never need signing material. Release CI explicitly enables signing.
-            if (providers.gradleProperty("signAllPublications").orNull == "true") {
-                signAllPublications()
-            }
+            // The plugin reads signAllPublications: release CI enables it; local/PR builds do not.
             pom {
                 name.set("Mobilerun ${project.name}")
                 description.set("Mobilerun device streaming: ${project.name} module")
