@@ -3,10 +3,6 @@
 
 package ai.mobilerun.stream.android
 
-import ai.mobilerun.stream.core.SignallingListener
-import ai.mobilerun.stream.core.SignallingTransportFactory
-import ai.mobilerun.stream.core.StreamCredentials
-import ai.mobilerun.stream.core.StreamStatus
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,15 +22,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
 import org.junit.After
-import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -50,7 +44,7 @@ class InputTestActivity : Activity() {
     }
 }
 
-/** Real view-event paths against a live device. Targets are upright video pixels, supplied by the caller. */
+/** Assertions compare decoded image crops, excluding the changing device status bar. */
 class DeviceStreamViewE2eTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -60,8 +54,28 @@ class DeviceStreamViewE2eTest {
     private lateinit var session: DeviceStreamSession
     private lateinit var activity: InputTestActivity
     private val view get() = activity.stream
+    private val size get() = requireNotNull(session.videoSize.value)
+    private val tapX get() = requireNotNull(args.getString("tapX")) { "tapX required" }.toDouble()
+    private val tapY get() = requireNotNull(args.getString("tapY")) { "tapY required" }.toDouble()
 
     private fun ui(block: () -> Unit) = instrumentation.runOnMainSync(block)
+
+    @Before
+    fun connect() = runBlocking {
+        val device = E2eDevice.load(context)
+        session = DeviceStreamSession(context, { device.credentials }, scope,
+            StreamConfig(), device.signalling)
+        session.start()
+        device.awaitConnectedWithVideo(session)
+        activity = instrumentation.startActivitySync(Intent(context, InputTestActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as InputTestActivity
+        ui { view.attach(session) }
+        withTimeout(10.seconds) {
+            var ready = false
+            while (!ready) { ui { ready = view.renderedVideoRect != null }; delay(50) }
+        }
+        delay(2000)
+    }
 
     @After
     fun cleanup() {
@@ -71,10 +85,9 @@ class DeviceStreamViewE2eTest {
     }
 
     private suspend fun shot(name: String): ByteArray {
-        delay(1200)
+        delay(1500)
         val bytes = session.screenshot()
         File(out, "$name.png").writeBytes(bytes)
-        // Also records the actual renderer and letterbox, not just the remote screenshot.
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
         if (bitmap != null) {
             File(out, "$name-local.png").outputStream().use {
@@ -86,11 +99,14 @@ class DeviceStreamViewE2eTest {
         return bytes
     }
 
-    private fun point(videoX: Double, videoY: Double): Pair<Float, Float> {
-        val size = assertNotNull(session.videoSize.value)
+    private fun assertChanged(before: ByteArray, after: ByteArray, message: String, field: Boolean = false) {
+        assertFalse(screenshotCrop(before, field).contentEquals(screenshotCrop(after, field)), message)
+    }
+
+    private fun point(x: Double, y: Double): Pair<Float, Float> {
         val rect = assertNotNull(view.renderedVideoRect)
-        return (rect.left + rect.width() * videoX.toFloat() / size.displayWidth) to
-            (rect.top + rect.height() * videoY.toFloat() / size.displayHeight)
+        return (rect.left + rect.width() * x.toFloat() / size.displayWidth) to
+            (rect.top + rect.height() * y.toFloat() / size.displayHeight)
     }
 
     private fun touch(action: Int, points: List<Pair<Float, Float>>, time: Long) {
@@ -108,184 +124,133 @@ class DeviceStreamViewE2eTest {
 
     private suspend fun tap(x: Double, y: Double) {
         val time = SystemClock.uptimeMillis()
-        ui {
-            val p = point(x, y)
-            Log.i("StreamInputE2E", "tap video=$x,$y local=$p")
-            touch(MotionEvent.ACTION_DOWN, listOf(p), time)
-        }
+        ui { touch(MotionEvent.ACTION_DOWN, listOf(point(x, y)), time) }
         delay(80)
         ui { touch(MotionEvent.ACTION_UP, listOf(point(x, y)), time) }
         delay(1000)
     }
 
-    private suspend fun swipe(x: Double, from: Double, to: Double) {
+    @Test
+    fun touchScrollPinchAndLandscapeMapping() = runBlocking {
+        ui { view.sendSystemKey(SystemKey.HOME) }
+        val home = shot("touch-1-home")
+        tap(tapX, tapY)
+        assertChanged(home, shot("touch-2-app-opened"), "tap opens the selected app")
+        session.openUrl(requireNotNull(args.getString("openUrl")) { "openUrl required for scroll target" })
+        delay(3000)
+        val before = shot("touch-3-before-scroll")
+        val x = size.displayWidth / 2.0
         val time = SystemClock.uptimeMillis()
-        ui { touch(MotionEvent.ACTION_DOWN, listOf(point(x, from)), time) }
+        ui { touch(MotionEvent.ACTION_DOWN, listOf(point(x, size.displayHeight * .8)), time) }
         repeat(20) { index ->
-            ui { touch(MotionEvent.ACTION_MOVE, listOf(point(x, from + (to - from) * (index + 1) / 20)), time) }
+            ui { touch(MotionEvent.ACTION_MOVE,
+                listOf(point(x, size.displayHeight * (.8 - .5 * (index + 1) / 20))), time) }
             delay(20)
         }
-        ui { touch(MotionEvent.ACTION_UP, listOf(point(x, to)), time) }
-        delay(1200)
-    }
-
-    @Test
-    fun viewInputScenario() = runBlocking {
-        val file = File(context.filesDir, "stream-e2e.json")
-        assumeTrue("no runtime credentials", file.exists())
-        val json = JSONObject(file.readText())
-        val credentials = StreamCredentials(json.getString("streamUrl"), json.getString("streamToken"))
-        val rejected = AtomicInteger()
-        val real = OkHttpSignallingTransportFactory(okhttp3.OkHttpClient())
-        val signalling = SignallingTransportFactory { creds, listener ->
-            real.open(creds, object : SignallingListener by listener {
-                override fun onFailure(httpStatus: Int?) {
-                    if (httpStatus == 401 || httpStatus == 404) rejected.set(httpStatus)
-                    Log.i("StreamInputE2E", "signalling failure HTTP ${httpStatus ?: 0}")
-                    listener.onFailure(httpStatus)
-                }
-            })
-        }
-        session = DeviceStreamSession(context, { credentials }, scope, StreamConfig(), signalling)
-        session.start()
-        withTimeout(60.seconds) {
-            while (session.status.value != StreamStatus.Connected && rejected.get() == 0) delay(100)
-        }
-        check(rejected.get() == 0) { "PENDING: device HTTP ${rejected.get()}" }
-        withTimeout(30.seconds) { session.videoSize.first { it != null } }
-        activity = instrumentation.startActivitySync(Intent(context, InputTestActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as InputTestActivity
-        ui { view.attach(session) }
-        withTimeout(10.seconds) {
-            var ready = false
-            while (!ready) { ui { ready = view.renderedVideoRect != null }; delay(50) }
-        }
-        delay(2000)
-        ui { Log.i("StreamInputE2E", "video=${session.videoSize.value} rect=${view.renderedVideoRect}") }
-        shot("0-connected")
-        val size = assertNotNull(session.videoSize.value)
-        // Optional screenshot dimensions let the caller choose targets from full-resolution shots
-        // even when the decoded stream uses a smaller resolution.
-        val scaleX = size.displayWidth / (args.getString("coordinateWidth")?.toDouble() ?: size.displayWidth.toDouble())
-        val scaleY = size.displayHeight / (args.getString("coordinateHeight")?.toDouble() ?: size.displayHeight.toDouble())
-        // Capture-only mode permits choosing known targets without guessing at the cloud screen.
-        if (args.getString("captureOnly") == "true") {
-            ui { view.sendSystemKey(SystemKey.HOME) }
-            delay(1000)
-            args.getString("tapX")?.let {
-                tap(it.toDouble() * scaleX, requireNotNull(args.getString("tapY")).toDouble() * scaleY)
-            }
-            args.getString("prepareTapX")?.let {
-                tap(it.toDouble() * scaleX, requireNotNull(args.getString("prepareTapY")).toDouble() * scaleY)
-            }
-            args.getString("openUrl")?.let { session.openUrl(it) }
-            delay(2000)
-            shot("0-capture")
-            return@runBlocking
-        }
-
-        ui { view.sendSystemKey(SystemKey.HOME) }
-        val home = shot("1-home")
-        val tapX = requireNotNull(args.getString("tapX")) { "tapX is required" }.toDouble() * scaleX
-        val tapY = requireNotNull(args.getString("tapY")) { "tapY is required" }.toDouble() * scaleY
-        tap(tapX, tapY)
-        val opened = shot("2-app-opened")
-        assertFalse(home.contentEquals(opened), "tap opens the selected app")
-        args.getString("openUrl")?.let { session.openUrl(it); delay(3000) }
-        val beforeScroll = shot("2-before-scroll")
-        val centerX = size.displayWidth / 2.0
-        swipe(centerX, size.displayHeight * .8, size.displayHeight * .3)
-        val scrolled = shot("3-scrolled")
-        assertFalse(beforeScroll.contentEquals(scrolled), "swipe scrolls the list")
-
+        ui { touch(MotionEvent.ACTION_UP, listOf(point(x, size.displayHeight * .3)), time) }
+        val scrolled = shot("touch-4-scrolled")
+        assertChanged(before, scrolled, "swipe scrolls content below the status bar")
         ui {
-            val (px, py) = point(centerX, size.displayHeight * .5)
+            val (px, py) = point(x, size.displayHeight * .5)
             val properties = arrayOf(MotionEvent.PointerProperties().apply {
                 id = 0; toolType = MotionEvent.TOOL_TYPE_MOUSE
             })
             val coords = arrayOf(MotionEvent.PointerCoords().apply {
-                x = px; y = py
-                setAxisValue(MotionEvent.AXIS_VSCROLL, -3f)
+                this.x = px; y = py; setAxisValue(MotionEvent.AXIS_VSCROLL, -3f)
             })
-            for (action in listOf(MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_SCROLL)) {
-                val now = SystemClock.uptimeMillis()
-                val event = MotionEvent.obtain(now, now, action, 1, properties, coords,
-                    0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0)
-                try { assertTrue(view.dispatchGenericMotionEvent(event)) } finally { event.recycle() }
-            }
+            val now = SystemClock.uptimeMillis()
+            val event = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, properties, coords,
+                0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0)
+            try { assertTrue(view.dispatchGenericMotionEvent(event)) } finally { event.recycle() }
         }
-        shot("3-wheel")
-
-        // Two stable platform ids become two wire slots. Cloud handling may support one pointer.
-        val time = SystemClock.uptimeMillis()
+        val wheeled = shot("touch-5-wheel")
+        assertChanged(scrolled, wheeled, "wheel scrolls content")
+        val pinchTime = SystemClock.uptimeMillis()
         ui {
-            touch(MotionEvent.ACTION_DOWN, listOf(point(centerX - 30, size.displayHeight * .5)), time)
+            touch(MotionEvent.ACTION_DOWN, listOf(point(x - 30, size.displayHeight * .5)), pinchTime)
             touch(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                listOf(point(centerX - 30, size.displayHeight * .5), point(centerX + 30, size.displayHeight * .5)), time)
+                listOf(point(x - 30, size.displayHeight * .5),
+                    point(x + 30, size.displayHeight * .5)), pinchTime)
         }
         repeat(10) { index ->
-            ui { touch(MotionEvent.ACTION_MOVE, listOf(point(centerX - 30 - index * 8, size.displayHeight * .5),
-                point(centerX + 30 + index * 8, size.displayHeight * .5)), time) }
+            ui { touch(MotionEvent.ACTION_MOVE,
+                listOf(point(x - 30 - index * 8, size.displayHeight * .5),
+                    point(x + 30 + index * 8, size.displayHeight * .5)), pinchTime) }
             delay(20)
         }
         ui {
             touch(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                listOf(point(centerX - 102, size.displayHeight * .5), point(centerX + 102, size.displayHeight * .5)), time)
-            touch(MotionEvent.ACTION_UP, listOf(point(centerX - 102, size.displayHeight * .5)), time)
+                listOf(point(x - 102, size.displayHeight * .5),
+                    point(x + 102, size.displayHeight * .5)), pinchTime)
+            touch(MotionEvent.ACTION_UP, listOf(point(x - 102, size.displayHeight * .5)), pinchTime)
         }
-        shot("4-pinch")
-        Log.i("StreamInputE2E", "two-finger gesture dispatched with platform ids 7/8")
-
-        // HOME resets to a known screen; rotate only the local viewport, then tap the same target.
-        ui { view.sendSystemKey(SystemKey.HOME); activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-        delay(2000)
+        assertChanged(wheeled, shot("touch-6-pinch"), "two-finger gesture changes the page zoom")
+        ui {
+            view.sendSystemKey(SystemKey.HOME)
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        val landscapeHome = shot("touch-7-landscape-home")
+        ui { assertTrue(view.width > view.height, "local viewport rotated") }
         tap(tapX, tapY)
-        shot("5-local-landscape-tap")
+        assertChanged(landscapeHome, shot("touch-8-landscape-tap"), "known target opens in landscape")
         ui { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
-        delay(1500)
-        args.getString("textX")?.let { textX ->
-            tap(textX.toDouble() * scaleX, requireNotNull(args.getString("textY")).toDouble() * scaleY)
-        }
+    }
+
+    @Test
+    fun typingClipboardNavigationAndDisplayOnly() = runBlocking {
+        ui { view.sendSystemKey(SystemKey.HOME) }
+        val home = shot("keys-1-home")
+        tap(tapX, tapY)
+        val opened = shot("keys-2-app-opened")
+        assertChanged(home, opened, "tap opens app for typing")
+        tap(requireNotNull(args.getString("textX")).toDouble(),
+            requireNotNull(args.getString("textY")).toDouble())
+        val field = shot("keys-3-field")
         ui {
             view.showKeyboard()
             val input = assertNotNull(view.onCreateInputConnection(EditorInfo()))
-            input.setComposingText("mar", 1)
-            input.commitText("mars", 1)
+            input.setComposingText("mars", 1)
+            input.finishComposingText()
         }
-        shot("6-ime-text")
+        val ime = shot("keys-4-ime")
+        assertChanged(field, ime, "IME composition is committed into the visible field", field = true)
         ui {
             view.hideKeyboard()
-            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A))
-            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_A))
-            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_B))
-            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_B))
+            for (code in listOf(KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_B)) {
+                view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            }
         }
-        shot("7-hardware-text")
-        ui {
-            val input = assertNotNull(view.onCreateInputConnection(EditorInfo()))
-            input.deleteSurroundingText(1, 0)
-        }
-        shot("8-backspace")
+        val hardware = shot("keys-5-hardware")
+        assertChanged(ime, hardware, "hardware characters appear in the field", field = true)
+        ui { assertNotNull(view.onCreateInputConnection(EditorInfo())).deleteSurroundingText(1, 0) }
+        val deleted = shot("keys-6-backspace")
+        assertChanged(hardware, deleted, "Backspace changes the field", field = true)
         ui {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("test", " paste"))
-            val timeNow = SystemClock.uptimeMillis()
-            view.dispatchKeyEvent(KeyEvent(timeNow, timeNow, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_V, 0,
-                KeyEvent.META_CTRL_ON))
-            view.dispatchKeyEvent(KeyEvent(timeNow, timeNow, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_V, 0,
-                KeyEvent.META_CTRL_ON))
+            clipboard.setPrimaryClip(ClipData.newPlainText("test", "paste"))
+            val now = SystemClock.uptimeMillis()
+            for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+                view.dispatchKeyEvent(KeyEvent(
+                    now, now, action, KeyEvent.KEYCODE_V, 0, KeyEvent.META_CTRL_ON))
+            }
         }
-        shot("9-clipboard")
-        ui { assertNotNull(view.onCreateInputConnection(EditorInfo())).performEditorAction(EditorInfo.IME_ACTION_GO) }
-        shot("10-enter")
+        val pasted = shot("keys-7-clipboard")
+        assertChanged(deleted, pasted, "clipboard paste changes the field", field = true)
+        ui {
+            assertNotNull(view.onCreateInputConnection(EditorInfo()))
+                .performEditorAction(EditorInfo.IME_ACTION_GO)
+        }
+        val entered = shot("keys-8-enter")
+        assertChanged(pasted, entered, "Enter submits the field")
         ui { view.sendSystemKey(SystemKey.BACK) }
-        shot("11-back")
-        ui { view.sendSystemKey(SystemKey.RECENT) }
-        shot("12-recents")
+        val back = shot("keys-9-back")
+        assertChanged(entered, back, "BACK navigates to the prior page")
         ui { view.sendSystemKey(SystemKey.HOME) }
-        shot("13-home")
+        val returnedHome = shot("keys-10-home")
+        assertChanged(back, returnedHome, "HOME returns to launcher")
         ui { view.hasControl = false; view.sendSystemKey(SystemKey.RECENT) }
-        shot("14-display-only")
-        Log.i("StreamInputE2E", "view input scenario complete")
+        assertContentEquals(screenshotCrop(returnedHome), screenshotCrop(shot("keys-11-display-only")),
+            "display-only suppresses input; the content crop stays identical")
     }
 }

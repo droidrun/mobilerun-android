@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.InternalStreamApi
+import ai.mobilerun.stream.core.PeerTransportFactory
 import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentialsProvider
@@ -23,10 +25,11 @@ import kotlin.time.Duration.Companion.milliseconds
  * A live stream session to one Mobilerun cloud device: signalling WebSocket plus WebRTC, with the
  * same protocol and recovery behaviour as `@mobilerun/react`.
  *
- * The session connects on [start], reports its progress in [status], exposes the received video as
- * [videoTrack] for a renderer, and sends input as raw control messages ([sendControl],
- * [sendHover]). When the connection drops it rebuilds itself with exponential backoff and asks the
- * [credentials] provider for fresh credentials; after [ReconnectPolicy.MAX_ATTEMPTS] failed attempts it reports
+ * The session connects on [start], reports its progress in [status], exposes the received video
+ * through the Android view. Input mapping and channel sends are handled by the view. When the
+ * connection drops it rebuilds itself with exponential backoff and asks the
+ * [credentials] provider for fresh credentials. After [ReconnectPolicy.MAX_ATTEMPTS] failed attempts
+ * it reports
  * [StreamStatus.Unavailable] until [retry] is called. It has no Android lifecycle coupling: the
  * app decides when to [start] and [close].
  *
@@ -50,6 +53,7 @@ public class DeviceStreamSession internal constructor(
     scope: CoroutineScope,
     config: StreamConfig,
     signalling: SignallingTransportFactory,
+    private val peers: PeerTransportFactory? = null,
 ) {
     /** Creates a session; nothing happens until [start]. */
     public constructor(
@@ -71,7 +75,8 @@ public class DeviceStreamSession internal constructor(
         scope = scope,
         credentials = credentials,
         signalling = signalling,
-        peers = WebRtcPeerTransportFactory({ WebRtcRuntime.factory(appContext) }, media, config.videoCodec),
+        peers = peers ?: WebRtcPeerTransportFactory(
+            { WebRtcRuntime.factory(appContext) }, media, config.videoCodec),
         logger = config.logger,
     )
 
@@ -93,14 +98,14 @@ public class DeviceStreamSession internal constructor(
 
     /** Starts connecting. Does nothing if already started or closed. */
     public fun start() {
-        WebRtcRuntime.prewarm(appContext)
+        if (peers == null) WebRtcRuntime.prewarm(appContext)
         engine.start()
     }
 
-    /** Starts a new reconnect cycle after the status became [StreamStatus.Unavailable]; otherwise does nothing. */
+    /** Starts a new cycle after [StreamStatus.Unavailable]; otherwise does nothing. */
     public fun retry(): Unit = engine.retry()
 
-    /** Stops the session and releases its connection, channels and video. A closed session cannot be restarted. */
+    /** Releases the connection, channels and video. A closed session cannot be restarted. */
     public fun close() {
         engine.close()
     }
@@ -112,12 +117,14 @@ public class DeviceStreamSession internal constructor(
      * Sends [bytes], a control message such as `ControlMessages.touch(...)`, on the control channel.
      * Returns `false`, dropping them, if the channel is not open.
      */
+    @InternalStreamApi
     public fun sendControl(bytes: ByteArray): Boolean = engine.sendControl(bytes)
 
     /**
      * Sends [bytes], a hover message, on the hover channel only, never on the control channel.
      * Returns `false`, dropping them, if the channel is not open.
      */
+    @InternalStreamApi
     public fun sendHover(bytes: ByteArray): Boolean = engine.sendHover(bytes)
 
     /** Asks the device to open [url]: sent now if the connection is up, otherwise when it is. */

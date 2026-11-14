@@ -40,6 +40,25 @@ class StreamInputConnectionTest {
     }
 
     @Test
+    fun finishingCompositionCommitsThenBackspaceDeletesRemoteText() {
+        connection.setComposingText("hello", 1)
+        connection.finishComposingText()
+        connection.deleteSurroundingText(1, 0)
+        messages.assertSent(ControlMessages.text("hello"),
+            ControlMessages.keycode(0, 67), ControlMessages.keycode(1, 67))
+        assertTrue(connection.editable.isEmpty())
+        connection.finishComposingText()
+        assertEquals(3, messages.size)
+    }
+
+    @Test
+    fun largeDeleteRequestsAreBounded() {
+        connection.deleteSurroundingText(Int.MAX_VALUE, Int.MAX_VALUE)
+        assertEquals(256, messages.size)
+        assertFalse(connection.deleteSurroundingText(-1, 0))
+    }
+
+    @Test
     fun backspaceWithEmptyBufferAndEditorActionSendKeyPairs() {
         connection.deleteSurroundingText(1, 0)
         connection.performEditorAction(EditorInfo.IME_ACTION_DONE)

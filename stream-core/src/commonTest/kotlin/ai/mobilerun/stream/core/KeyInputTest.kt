@@ -11,25 +11,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
-class KeyAndScrollInputTest {
-    @Test
-    fun wheelModesMatchReactAndAndroidTicksAreNotScaledTwice() {
-        val cases = listOf(
-            Triple(ScrollInput.Unit.PIXEL, 100.0, ScrollInput.Ticks(-1.0, -1.0)),
-            Triple(ScrollInput.Unit.LINE, 1.0, ScrollInput.Ticks(-1.0, -1.0)),
-            Triple(ScrollInput.Unit.PAGE, 1.0, ScrollInput.Ticks(-3.0, -3.0)),
-            Triple(ScrollInput.Unit.ANDROID_AXIS, 1.0, ScrollInput.Ticks(-1.0, 1.0)),
-        )
-        cases.forEach { (unit, delta, expected) ->
-            assertEquals(expected, ScrollInput.ticks(delta, delta, unit), unit.name)
-        }
-        val ticks = ScrollInput.ticks(0.0, 1.0, ScrollInput.Unit.ANDROID_AXIS)
-        val message = ControlMessages.scroll(100, 100, 50.0, 50.0, ticks.horizontal, ticks.vertical)
-        // One Android tick is 1/16 in the wire's signed fixed point: 0x0800, little-endian.
-        assertEquals(0, message[15].toInt())
-        assertEquals(8, message[16].toInt())
-    }
-
+class KeyInputTest {
     @Test
     fun printableCharactersOnlyInjectTextOnKeyDown() {
         for ((code, text) in listOf("KeyA" to "a", "KeyA" to "A", "KeyE" to "é", "Space" to " ")) {
@@ -40,15 +22,16 @@ class KeyAndScrollInputTest {
     }
 
     @Test
-    fun controlKeysInjectDownAndUpWithPlatformMetaState() {
+    fun controlKeysInjectDownAndUpWithReactMetaFlags() {
         val codes = listOf("Backspace", "Delete", "Enter", "Tab", "Escape", "Home", "End",
             "PageUp", "PageDown", "Insert", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-            "F1", "F12", "ShiftLeft", "ControlRight", "AltLeft", "MetaRight")
+            "NumpadEnter", "F1", "F12", "ShiftLeft", "ControlRight", "AltLeft", "MetaRight")
         for (code in codes) {
             val messages = route(code, null, AndroidKeys.META_SHIFT_ON)
             assertEquals(2, messages.size, code)
             for (action in 0..1) assertContentEquals(ControlMessages.keycode(action,
-                KeyboardCodes.keycodeByCode.getValue(code), metaState = AndroidKeys.META_SHIFT_ON), messages[action], code)
+                KeyboardCodes.keycodeByCode.getValue(code), metaState = AndroidKeys.META_SHIFT_ON),
+                messages[action], code)
         }
     }
 
@@ -82,10 +65,46 @@ class KeyAndScrollInputTest {
         assertEquals(0, messages.size)
     }
 
+    @Test
+    fun unmappedKeysAreNotConsumedEvenWithModifiersOrPrintableText() {
+        for (keycode in listOf(4, 0, 24, 25, 79, 27, 23, 96, 85)) {
+            for (meta in listOf(0, AndroidKeys.META_CTRL_ON)) {
+                assertFalse(KeyInput.route(keycode, "x", true, meta, { error("clipboard") },
+                    send = { error("unmapped input sent") }))
+            }
+        }
+    }
+
+    @Test
+    fun controlCharactersAreNeverInjectedAsText() {
+        for (text in listOf("\n", "\t", "\u0000", "\u007f")) {
+            val messages = route("KeyA", text, 0)
+            assertContentEquals(ControlMessages.keycode(0, 29), messages.single())
+        }
+    }
+
+    @Test
+    fun onlyReactMetaFlagsAreSentAndCapsLockXorsShiftForLetters() {
+        for (capsLock in listOf(false, true)) for (shift in listOf(false, true)) {
+            val messages = mutableListOf<ByteArray>()
+            val meta = AndroidKeys.META_CTRL_ON or (if (shift) AndroidKeys.META_SHIFT_ON else 0) or
+                0x100000 or 0x40 // platform lock and directional flags must not leak
+            KeyInput.route(29, "a", true, meta, { null }, capsLock) { messages += it }
+            val expected = AndroidKeys.META_CTRL_ON or
+                (if (shift != capsLock) AndroidKeys.META_SHIFT_ON else 0)
+            assertContentEquals(ControlMessages.keycode(0, 29, metaState = expected), messages.single())
+        }
+        val messages = mutableListOf<ByteArray>()
+        KeyInput.route(66, null, true, 0x100000, { null }, capsLock = true) { messages += it }
+        assertContentEquals(ControlMessages.keycode(0, 66), messages.single())
+    }
+
     private fun route(code: String, text: String?, meta: Int): List<ByteArray> {
         val messages = mutableListOf<ByteArray>()
         for (down in listOf(true, false)) {
-            KeyInput.route(KeyboardCodes.keycodeByCode.getValue(code), text, down, meta, { "paste me" }) { messages += it }
+            KeyInput.route(KeyboardCodes.keycodeByCode.getValue(code), text, down, meta, { "paste me" }) {
+                messages += it
+            }
         }
         return messages
     }

@@ -41,11 +41,16 @@ internal class StreamInputConnection(
         return true
     }
 
+    override fun finishComposingText(): Boolean {
+        if (!canSend()) return false
+        return commitText(buffer.toString(), 1)
+    }
+
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (!canSend() || beforeLength < 0 || afterLength < 0) return false
         if (buffer.isNotEmpty()) return super.deleteSurroundingText(beforeLength, afterLength)
-        repeat(beforeLength) { KeyInput.press(AndroidKeys.DEL, send) }
-        repeat(afterLength) { KeyInput.press(AndroidKeys.FORWARD_DEL, send) }
+        repeat(beforeLength.coerceAtMost(64)) { KeyInput.press(AndroidKeys.DEL, send) }
+        repeat(afterLength.coerceAtMost(64)) { KeyInput.press(AndroidKeys.FORWARD_DEL, send) }
         return true
     }
 
@@ -62,7 +67,8 @@ internal class StreamInputConnection(
         when (actionCode) {
             EditorInfo.IME_ACTION_UNSPECIFIED, EditorInfo.IME_ACTION_NONE, EditorInfo.IME_ACTION_GO,
             EditorInfo.IME_ACTION_SEARCH, EditorInfo.IME_ACTION_SEND, EditorInfo.IME_ACTION_NEXT,
-            EditorInfo.IME_ACTION_DONE, EditorInfo.IME_ACTION_PREVIOUS -> KeyInput.press(AndroidKeys.ENTER, send)
+            EditorInfo.IME_ACTION_DONE, EditorInfo.IME_ACTION_PREVIOUS ->
+                KeyInput.press(AndroidKeys.ENTER, send)
             else -> return false
         }
         return true

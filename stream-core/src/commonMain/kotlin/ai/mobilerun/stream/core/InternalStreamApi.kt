@@ -4,9 +4,9 @@
 package ai.mobilerun.stream.core
 
 /**
- * Marks building blocks that exist for the Mobilerun stream modules and their tests: the session
- * engine, the transport seams and the reconnect controller. They may change in any release. Apps
- * use `DeviceStreamSession` and `StreamStatus`.
+ * Marks implementation building blocks shared across the stream modules: connection engines,
+ * transport seams, raw-channel sends and input mapping/routing. These are not app-facing APIs
+ * and may change in any release. Apps use the session, Android view or Compose wrapper.
  */
 @RequiresOptIn(
     level = RequiresOptIn.Level.ERROR,

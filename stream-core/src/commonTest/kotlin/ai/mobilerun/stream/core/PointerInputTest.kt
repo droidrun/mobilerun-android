@@ -72,15 +72,13 @@ class PointerInputTest {
     }
 
     @Test
-    fun cancelReleasesAllPointersAndResetSendsNothing() {
+    fun cancelReleasesAllPointersAndPendingMoves() {
         input.down(42, 500.0, 200.0, geometry)
         input.down(43, 500.0, 300.0, geometry)
         input.cancel()
         assertEquals(listOf(0, 0, 3, 3), actions())
-        input.down(44, 500.0, 300.0, geometry)
         val count = messages.size
-        input.reset()
-        input.up(44)
+        input.up(42)
         input.flushMoves()
         assertEquals(count, messages.size)
     }
@@ -90,7 +88,7 @@ class PointerInputTest {
         for (id in 10..19) assertTrue(input.down(id, 500.0, 200.0, geometry))
         assertFalse(input.down(20, 500.0, 200.0, geometry))
         assertFalse(input.down(10, 500.0, 200.0, geometry))
-        assertTrue(input.down(-1, 500.0, 200.0, geometry, mouse = true))
+        assertTrue(input.down(-1, 500.0, 200.0, geometry))
         assertEquals(-1, slots().last())
         assertTrue(messages.last().sliceArray(2..9).all { it == (-1).toByte() })
         input.up(13)

@@ -10,7 +10,8 @@ The headless core, Android connection layer and interactive video view exist. De
 |---|---|---|
 | `:protocol` | `ai.mobilerun.stream.protocol` | protocol constants, binary control-message encoders, signalling message types and parser |
 | `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, pure input geometry and routing |
-| `:stream-android` | `ai.mobilerun.stream.android` | `DeviceStreamSession`, interactive `DeviceStreamView`, and Compose `DeviceStream` |
+| `:stream-android` | `ai.mobilerun.stream.android` | `DeviceStreamSession` and interactive `DeviceStreamView` |
+| `:stream-compose` | `ai.mobilerun.stream.compose` | optional Compose `DeviceStream` wrapper |
 
 `:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; all code lives in `commonMain`. `:stream-android` is an Android library (minSdk 24, compileSdk 36, JVM 17).
 
@@ -26,7 +27,6 @@ val session = DeviceStreamSession(
 session.start()
 session.status       // StateFlow<StreamStatus>: Connecting, Connected, Reconnecting(attempt), Unavailable
 session.videoSize    // StateFlow<VideoSize?>, including rotation
-session.sendControl(ControlMessages.touch(...))
 session.close()                     // or cancel the scope: both release everything
 ```
 
@@ -44,7 +44,6 @@ val streamView = DeviceStreamView(context).apply {
 container.addView(streamView, ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 session.start()
 
-streamView.renderedVideoRect // RectF? in local view coordinates; null without video
 streamView.showKeyboard()    // focuses the view and requests the local IME
 streamView.hideKeyboard()
 streamView.sendSystemKey(SystemKey.BACK) // also HOME and RECENT
@@ -59,7 +58,8 @@ rotation; letterbox areas and a view without video remain transparent. Removing 
 window releases its renderer; adding it again resumes rendering the attached session. Repeated
 `attach` with the same session does nothing. The app owns the session's lifetime.
 
-Compose uses the same view and input paths:
+Compose uses the same view and input paths. Add `:stream-compose` and import
+`ai.mobilerun.stream.compose.DeviceStream`; `:stream-android` has no Compose dependency:
 
 ```kotlin
 DeviceStream(session = session, modifier = Modifier.fillMaxSize(), hasControl = true)
@@ -70,9 +70,9 @@ check; the server decides access. Touch uses stable slots for up to ten fingers,
 per frame and releases at the last position inside the video. Mouse drags use pointer -1; hover
 uses only the hover channel. Wheel axes use Android's tick units, without the browser pixel scaling.
 Hardware printable keys inject text; navigation, modifier and Ctrl/Command combinations inject
-Android keycodes and the event's meta state. Ctrl/Command+V pastes the local primary clipboard;
-Ctrl/Command+M presses Menu. The IME keeps composition local until `commitText`; Backspace and
-editor actions send device editing keys. The local input buffer does not mirror the remote editor,
+Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shift for letters. Ctrl/Command+V pastes the local primary clipboard;
+Ctrl/Command+M presses Menu. The IME requests immediate text input without suggestions. If an IME composes anyway, composition
+stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
 
 The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
@@ -92,13 +92,13 @@ explicit actions; this module supplies no navigation bar or other UI chrome.
 `stream-android/scripts/run-e2e.sh` runs an instrumented test against a live cloud device on an emulator: first frame, a tap sent as raw control bytes, a forced socket close with full rebuild, and a mid-session configuration refresh. Credentials come from a JSON file (`streamUrl`, `streamToken`) named by `STREAM_E2E_CREDENTIALS` and are copied into the test app's private storage at run time, never into the repository or the APK.
 
 For the interactive view scenario, set `STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.DeviceStreamViewE2eTest`.
-Use `CAPTURE_ONLY=true` first to inspect the initial screen, then supply `TAP_X`/`TAP_Y` for an app
-icon and `TEXT_X`/`TEXT_Y` for its text field (upright video pixels). If choosing targets from a
-full-resolution screenshot, set `COORDINATE_WIDTH`/`COORDINATE_HEIGHT` to that image's dimensions.
-`OPEN_URL` may select a long page for scrolling; capture-only `PREPARE_TAP_X`/`PREPARE_TAP_Y`
-can complete an app's setup before the full run. This exercises touch, swipe,
-two-finger input, a landscape viewport, IME commits, hardware keys, clipboard, Backspace, Enter
-and system navigation. `STREAM_E2E_OUT` receives remote and local-renderer screenshots and logs.
+Supply `TAP_X`/`TAP_Y` for an app icon and `TEXT_X`/`TEXT_Y` for its text field, in upright
+video pixels. Set `OPEN_URL` to a long page that supports scrolling and pinch zoom. Two scenarios
+assert touch, swipe, wheel, two-finger zoom and landscape mapping, then IME commits, hardware keys,
+clipboard paste, Backspace, Enter, BACK/HOME and display-only suppression. Comparisons use decoded
+content or text-field crops that exclude the status bar. `STREAM_E2E_OUT` receives remote and
+local-renderer screenshots and logs. Runtime target selection belongs outside the test.
+
 
 The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states.
 

@@ -8,7 +8,6 @@ import ai.mobilerun.stream.core.SignallingTransport
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentials
 import ai.mobilerun.stream.core.StreamStatus
-import ai.mobilerun.stream.core.VideoSize
 import ai.mobilerun.stream.protocol.AMotionEvent
 import ai.mobilerun.stream.protocol.ControlMessages
 import ai.mobilerun.stream.protocol.SignallingTiming
@@ -27,11 +26,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.junit.After
-import org.junit.Assume.assumeTrue
 import org.junit.Before
-import org.junit.FixMethodOrder
 import org.junit.Test
-import org.junit.runners.MethodSorters
 import org.webrtc.VideoFrame
 import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
@@ -52,17 +48,19 @@ private const val TAG = "StreamE2E"
  * before the run, and the test skips itself if the file is missing. Optional instrumentation arguments:
  * `tapX`, `tapY` (video pixels). Evidence (screenshots) is written to `files/e2e-out/`.
  */
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class DeviceStreamE2eTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val out = File(context.filesDir, "e2e-out").also { it.mkdirs() }
+    private lateinit var device: E2eDevice
     private lateinit var scope: CoroutineScope
     private lateinit var tap: TappingSignalling
     private lateinit var session: DeviceStreamSession
 
     /** Wraps the real signalling: records the offers and answers and lets the test inject server frames. */
-    private class TappingSignalling(private val inner: SignallingTransportFactory) : SignallingTransportFactory {
+    private class TappingSignalling(
+        private val inner: SignallingTransportFactory,
+    ) : SignallingTransportFactory {
         val transports = CopyOnWriteArrayList<OkHttpSignallingTransport>()
         val configurations = CopyOnWriteArrayList<String>()
         val sentOffers = CopyOnWriteArrayList<String>()
@@ -97,15 +95,12 @@ class DeviceStreamE2eTest {
 
     @Before
     fun setUp() {
-        val config = File(context.filesDir, "stream-e2e.json")
-        assumeTrue("no stream-e2e.json in the app files dir", config.exists())
-        val json = JSONObject(config.readText())
-        val creds = StreamCredentials(json.getString("streamUrl"), json.getString("streamToken"))
+        device = E2eDevice.load(context)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        tap = TappingSignalling(OkHttpSignallingTransportFactory(okhttp3.OkHttpClient()))
+        tap = TappingSignalling(device.signalling)
         session = DeviceStreamSession(
             context = context,
-            credentials = { creds },
+            credentials = { device.credentials },
             config = StreamConfig(logger = { Log.i(TAG, it) }),
             scope = scope,
             signalling = tap,
@@ -121,11 +116,6 @@ class DeviceStreamE2eTest {
     private fun shot(name: String, bytes: ByteArray) {
         File(out, "$name.png").writeBytes(bytes)
         Log.i(TAG, "shot $name bytes=${bytes.size}")
-    }
-
-    private suspend fun awaitConnectedWithVideo(): VideoSize = withTimeout(60.seconds) {
-        session.status.first { it == StreamStatus.Connected }
-        session.videoSize.first { it != null }!!
     }
 
     /** Counts frames of whatever track is current until [stop]. */
@@ -153,13 +143,13 @@ class DeviceStreamE2eTest {
     }
 
     @Test
-    fun e2eFullScenario() = runBlocking {
+    fun firstFrameTapAndReconnect() = runBlocking {
         val counter = FrameCounter(session, scope)
         val t0 = SystemClock.elapsedRealtime()
         session.start()
 
         // 1. First frame.
-        val size = awaitConnectedWithVideo()
+        val size = device.awaitConnectedWithVideo(session)
         Log.i(TAG, "first frame after ${SystemClock.elapsedRealtime() - t0} ms size=$size")
         assertTrue(framesGrow(counter), "video frames keep arriving")
         delay(2_000)
@@ -182,7 +172,8 @@ class DeviceStreamE2eTest {
         delay(3_000)
         val after = session.screenshot()
         shot("2-after-tap", after)
-        assertFalse(before.contentEquals(after), "the tap changed the device screen")
+        assertFalse(screenshotCrop(before).contentEquals(screenshotCrop(after)),
+            "the tap changed the device screen")
 
         // 3. Forced WebSocket close: full rebuild, video again.
         val socketsBefore = tap.transports.size
@@ -190,7 +181,7 @@ class DeviceStreamE2eTest {
         val watcher = scope.launchStatuses(statuses)
         tap.transports.last().socket.cancel()
         withTimeout(30.seconds) { session.status.first { it is StreamStatus.Reconnecting } }
-        awaitConnectedWithVideo()
+        device.awaitConnectedWithVideo(session)
         assertTrue(tap.transports.size > socketsBefore, "a new socket was opened")
         assertTrue(framesGrow(counter), "video resumed after the rebuild")
         watcher.cancel()
@@ -200,6 +191,16 @@ class DeviceStreamE2eTest {
         delay(2_000)
         shot("3-after-reconnect", session.screenshot())
 
+        counter.stop()
+        assertNotEquals(0, counter.frames.get())
+    }
+
+    @Test
+    fun liveConfigurationRefreshKeepsVideo() = runBlocking {
+        val counter = FrameCounter(session, scope)
+        session.start()
+        device.awaitConnectedWithVideo(session)
+        assertTrue(framesGrow(counter), "video frames arrive before refresh")
         // 4. Mid-session credential refresh. The server pushed none, so the configuration it sent
         // at the start is replayed as if it were a refresh. Proof: an ICE-restart offer goes out, the
         // server answers it, and both carry a new ICE ufrag; the stream is not rebuilt.
@@ -210,14 +211,18 @@ class DeviceStreamE2eTest {
         val connectedSockets = tap.transports.size
         tap.listener!!.onMessage(tap.configurations.first())
         withTimeout(30.seconds) {
-            while (tap.sentOffers.size <= offersBefore || tap.receivedAnswers.size <= answersBefore) delay(100)
+            while (tap.sentOffers.size <= offersBefore || tap.receivedAnswers.size <= answersBefore) {
+                delay(100)
+            }
         }
         val restartOffer = tap.sentOffers.last()
         val restartAnswer = tap.receivedAnswers.last()
         Log.i(TAG, "ice ufrag offer ${iceUfrag(initialOffer)} -> ${iceUfrag(restartOffer)}, " +
             "answer ${iceUfrag(initialAnswer)} -> ${iceUfrag(restartAnswer)}")
-        assertNotEquals(iceUfrag(initialOffer), iceUfrag(restartOffer), "the restart offer has a new ICE generation")
-        assertNotEquals(iceUfrag(initialAnswer), iceUfrag(restartAnswer), "the answer belongs to the new ICE generation")
+        assertNotEquals(iceUfrag(initialOffer), iceUfrag(restartOffer),
+            "the restart offer has a new ICE generation")
+        assertNotEquals(iceUfrag(initialAnswer), iceUfrag(restartAnswer),
+            "the answer belongs to the new ICE generation")
         // Wait out the 15 s grace window: the stream must still be up afterwards.
         delay(SignallingTiming.ICE_RESTART_GRACE_MS + 5_000)
         assertEquals(StreamStatus.Connected, session.status.value, "stream stays up through the refresh")

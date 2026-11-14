@@ -1,13 +1,11 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "ai.mobilerun.stream.android"
     compileSdk = 36
 
-    buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
 
     defaultConfig {
@@ -39,14 +37,8 @@ kotlin {
 }
 
 dependencies {
-    constraints {
-        implementation(libs.androidx.lifecycle.runtime) {
-            because("Older transitive lifecycle lint checks use APIs removed from the Android Gradle plugin")
-        }
-    }
     api(project(":protocol"))
     api(project(":stream-core"))
-    api(libs.compose.ui)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
     // The OkHttpClient is part of StreamConfig.

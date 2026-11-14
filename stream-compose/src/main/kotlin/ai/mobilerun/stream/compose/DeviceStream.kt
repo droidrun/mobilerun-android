@@ -1,7 +1,10 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
-package ai.mobilerun.stream.android
+package ai.mobilerun.stream.compose
+
+import ai.mobilerun.stream.android.DeviceStreamSession
+import ai.mobilerun.stream.android.DeviceStreamView
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
