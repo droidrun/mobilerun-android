@@ -458,6 +458,51 @@ class StreamSessionEngineTest {
         assertEquals(StreamStatus.Reconnecting(0), h.status)
     }
 
+    @Test
+    fun hiddenHostPausesKeepAliveAndForegroundResumes() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.engine.setHostVisible(false)
+        h.settle()
+        h.advance(20_000)
+        assertTrue(h.socket.framesOf("keepAlive").isEmpty())
+        h.engine.setHostVisible(true)
+        h.settle()
+        h.advance(10_000)
+        assertEquals(1, h.socket.framesOf("keepAlive").size)
+    }
+
+    @Test
+    fun wakeShortCircuitsBackoffAndNeverStartsOrRevivesClosedSession() = runTest {
+        val h = Harness(this)
+        h.engine.handleWake(); h.settle()
+        assertTrue(h.signalling.sockets.isEmpty())
+        h.connect()
+        h.socket.serverCloses(); h.settle()
+        val before = h.signalling.sockets.size
+        h.engine.handleWake(); h.settle()
+        assertEquals(before + 1, h.signalling.sockets.size)
+        h.engine.close(); h.settle()
+        h.engine.handleWake(); h.engine.setHostVisible(true); h.settle()
+        h.advance(60_000)
+        assertEquals(before + 1, h.signalling.sockets.size)
+    }
+
+    @Test
+    fun networkWakeRevivesUnavailableSession() = runTest {
+        val h = Harness(this)
+        h.engine.start(); h.settle()
+        for (attempt in 1..ReconnectPolicy.MAX_ATTEMPTS) {
+            h.socket.serverCloses(); h.settle()
+            h.advance(ReconnectPolicy.delayMs(attempt, 0.5))
+        }
+        h.socket.serverCloses(); h.settle()
+        assertEquals(StreamStatus.Unavailable, h.status)
+        val before = h.signalling.sockets.size
+        h.engine.handleWake(); h.settle()
+        assertEquals(before + 1, h.signalling.sockets.size)
+    }
+
     // ---- credentials ----
 
     @Test

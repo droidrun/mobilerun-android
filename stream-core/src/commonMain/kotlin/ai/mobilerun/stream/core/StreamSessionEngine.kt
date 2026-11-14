@@ -106,6 +106,7 @@ public class StreamSessionEngine(
 
     private val closed: Boolean get() = !engineJob.isActive
     private var started = false
+    private var hostVisible = true
 
     // The newest credentials the provider returned, and the ones the live connection was opened with.
     private var latestTarget: StreamCredentials? = null
@@ -147,6 +148,16 @@ public class StreamSessionEngine(
     /** Starts a fresh reconnect cycle after the stream became [StreamStatus.Unavailable]; otherwise does nothing. */
     public fun retry() {
         engineScope.launchGuarded { controller.retry() }
+    }
+
+    /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
+    public fun setHostVisible(visible: Boolean) {
+        engineScope.launchGuarded { hostVisible = visible }
+    }
+
+    /** Foreground/network recovery. A closed or not-yet-started session is never started by wake. */
+    public fun handleWake() {
+        engineScope.launchGuarded { if (started) controller.handleWake() }
     }
 
     /** Stops the session; its connection is released shortly after. Afterwards nothing happens anymore. */
@@ -329,7 +340,7 @@ public class StreamSessionEngine(
             scope.launchGuarded {
                 while (true) {
                     delay(SignallingTiming.KEEP_ALIVE_INTERVAL_MS)
-                    if (isCurrent && wsOpen) send(ClientMessage.KeepAlive(sessionId))
+                    if (isCurrent && wsOpen && hostVisible) send(ClientMessage.KeepAlive(sessionId))
                 }
             }
         }
@@ -629,7 +640,7 @@ internal fun randomSessionId(): String {
 
 // The engine's own serial context: its state is only touched from there.
 @OptIn(ExperimentalCoroutinesApi::class)
-private fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
+internal fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
     val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
     return base.limitedParallelism(1)
 }

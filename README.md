@@ -4,14 +4,14 @@ Kotlin library for embedding Mobilerun device streaming and events.
 
 ## Status: pre-release
 
-The headless core, Android connection layer and interactive video view exist. Default UI chrome is planned; nothing is published.
+The headless core, Android connection layer and interactive video view exist. The optional default UI, approval controller and white-label theme exist; nothing is published.
 
 | Module | Package | Contents |
 |---|---|---|
 | `:protocol` | `ai.mobilerun.stream.protocol` | protocol constants, binary control-message encoders, signalling message types and parser |
-| `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, pure input geometry and routing |
+| `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, input routing, approval controller and credentials helper |
 | `:stream-android` | `ai.mobilerun.stream.android` | `DeviceStreamSession` and interactive `DeviceStreamView` |
-| `:stream-compose` | `ai.mobilerun.stream.compose` | optional Compose `DeviceStream` wrapper |
+| `:stream-compose` | `ai.mobilerun.stream.compose` | optional default UI, tokens, labels, navigation and approval card |
 
 `:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; all code lives in `commonMain`. `:stream-android` is an Android library (minSdk 24, compileSdk 36, JVM 17).
 
@@ -85,7 +85,133 @@ onBackPressedDispatcher.addCallback(this) {
 ```
 
 Decide in that handler when to navigate locally instead. `SystemKey.HOME` and `RECENT` are also
-explicit actions; this module supplies no navigation bar or other UI chrome.
+explicit actions. The Compose module supplies optional navigation chrome.
+
+## Default UI and white-labeling
+
+The optional `:stream-compose` module uses Compose foundation only. It does not read Material 3
+colors or typography, show a logo, or put a product name in the UI. `DeviceStream` adds a bottom-left
+status pill while connecting/reconnecting, an unavailable message with Retry, and a navigation bar
+below the video. Retry calls the same session recovery path as a custom UI. Reconnecting labels take
+precedence over `placeholderLabel`; connected video remains visible with `hasControl = false`, which
+also disables the navigation buttons. The standalone `NavigationBar(onAction)` emits `SystemKey`
+BACK/HOME/RECENT (4/3/187). `StreamStatusPill(label)` is reusable independently.
+
+```kotlin
+MobilerunTheme { // follows system light/dark mode
+    DeviceStream(
+        session = session,
+        modifier = Modifier.fillMaxSize(),
+        labels = StreamLabels(connecting = "Preparing", retry = "Try again"),
+        placeholderLabel = deviceState,
+        navigationBar = null, // omit, or provide { action, enabled -> ... }
+        // placeholder = { status, label -> YourPlaceholder(status, label) },
+        // unavailable = { retry -> YourUnavailable(retry) },
+    )
+}
+```
+
+`StreamLabels` overrides every stream string, including accessible navigation names. `TaskApprovalLabels`
+has the same twelve keys as React: `paymentCardTitle`, `waiting`, `card`, `app`, `domain`, `timeLeft`,
+`expired`, `approve`, `deny`, `viewSwitch`, `details`, `device`. Defaults are English; `{time}` in
+`timeLeft` and `{attempt}`/`{max}` in `StreamLabels.reconnectingAttempt` are replaceable placeholders.
+Backend-provided fact values and error messages remain the integrator's responsibility to localize.
+
+Override individual theme tokens via `copy`, without modifying the rest:
+
+```kotlin
+val tokens = StreamThemeTokens.Dark.copy(
+    primary = Color(0xFF2563EB),
+    primaryForeground = Color.White,
+    radius = 12.dp,
+    typography = StreamTypography(body = TextStyle(fontSize = 16.sp)),
+)
+MobilerunTheme(tokens) { DeviceStream(session, Modifier.fillMaxSize()) }
+```
+
+All thirteen React semantic colors are exposed: background, foreground, card, cardForeground,
+muted, mutedForeground, border, ring, primary, primaryForeground, accent, accentForeground,
+destructive, plus radius and body/caption/title typography. Slots can read `streamThemeTokens`.
+The defaults are React's `styles.css` values converted once: OKLCH → OKLab → linear sRGB using
+CSS Color 4 matrices, apply the sRGB transfer function, clip each channel to [0, 1], round to 8 bits.
+Light neutrals are #FFFFFF/#0A0A0A/#F5F5F5/#737373/#E5E5E5/#A1A1A1/#171717/#FAFAFA;
+destructive is #E7000B. Dark adds #262626 and destructive #FF6467; its border retains 10% white.
+Native dp/sp replace CSS px; the default radius is 8 dp and text is 12/14/16 sp. Native buttons use
+48 dp touch targets. Each property is independently replaceable.
+
+The plain `DeviceStreamView` remains the View API for custom hosts. Navigation, pill, approval card,
+and default overlays are Compose-only. A View host can embed them in `ComposeView` or build its own
+chrome on the headless core.
+
+## Task approvals
+
+The app talks to **your backend**. Never ship an API key in an app. The backend returns a
+`PendingApproval(approvalId, kind, details, expiresAt, deviceId)` and accepts an `ApprovalDecision`
+(`decision.value` is the lowercase backend value, `approve` or `deny`).
+Unknown kinds or invalid payment details show the generic heading and keep the actions available.
+
+```kotlin
+val controller = TaskApprovalController(
+    scope = scope,
+    fetchApproval = { taskId -> backend.pendingApproval(taskId) },
+    decide = { taskId, approvalId, decision -> backend.decide(taskId, approvalId, decision) },
+    // subscribe = { taskId, changed -> backend.subscribe(taskId, changed) }, // returns unsubscribe
+)
+controller.setTask(taskId)
+// In Compose:
+val state by controller.state.collectAsState()
+TaskApproval(
+    approval = state.approval,
+    onDecide = controller::decide,
+    isPending = state.isDeciding,
+    decision = state.decision,
+    error = state.error?.message,
+    labels = TaskApprovalLabels(approve = "Allow", deny = "Reject"),
+    // device = { DeviceStream(session, Modifier.fillMaxSize()) },
+    // actions = { decide, pending, decision -> YourApprovalActions(decide, pending, decision) },
+)
+// On host disposal:
+controller.close() // scope cancellation also cleans up
+```
+
+The controller loads immediately and polls every 3 seconds after the latest completed fetch. A
+subscription turns polling off by default; set `pollIntervalMs` explicitly to combine them or to 0
+to disable it. Push events only refetch. Overlapping/old-task results are dropped. `refetch()` does
+not re-subscribe. Decisions are deduplicated, and every success/error triggers a refetch, including
+404/409. A decision error survives successful fetches until the next decision or task change; a fetch
+error clears after a successful fetch. `setTask(id, enabled = false)` clears state and stops work.
+
+`parsePaymentCardDetails` accepts a nonempty label (falling back to credentialName), targetPackage
+and optional targetHost, ignoring wrongly typed optional fields. `remainingMs` and `formatRemaining`
+match React's countdown utilities. The card's one-second countdown is display only: **the backend
+decides expiry and permission**. Expired approvals still forward decisions. The optional device slot
+appears beside details on wide layouts; narrow layouts switch Details/Device while retaining the
+slot's composition. The approval actions are independently replaceable.
+
+## Visibility, network recovery and credentials
+
+`DeviceStream` installs `StreamLifecycle` automatically. App background pauses keep-alive sends;
+foreground and a new default network call `session.handleWake()`, which retries pending backoff
+immediately or starts a fresh recovery cycle from unavailable. It never starts a session that has
+not been started, or revives a closed session. The host still owns start/close. For custom View UI,
+create `StreamLifecycle(context, session)` on the main thread and close it on disposal. To manage
+visibility yourself set `observeLifecycle = false`, then call `setHostVisible` and `handleWake`.
+Use one lifecycle adapter per session.
+
+The credentials helper mirrors React's readiness polling without handling an API key:
+
+```kotlin
+val credentials = DeviceStreamCredentials(fetchDevice = {
+    backend.streamCredentials() // StreamCredentials?; null while not ready
+})
+val session = DeviceStreamSession(context, credentials.provider, scope)
+session.start()
+```
+
+It polls every 3 seconds while the callback returns null; a recovery/heal invokes it again for fresh
+credentials. Cancellation stops polling. Fetch failures propagate to the session's existing retry
+behavior. Stream tokens are short-lived backend-issued values; keep API keys exclusively on your
+backend and never embed either in source or screenshots.
 
 ## End-to-end check
 
@@ -101,6 +227,12 @@ local-renderer screenshots and logs. Runtime target selection belongs outside th
 
 
 The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states.
+
+`stream-compose/scripts/run-e2e.sh` uses the same runtime-only credentials contract for the default
+UI. It captures connecting/reconnecting/unavailable/retry, light/dark/custom theme and labels,
+approval countdown/decision/refetch, plus live video with navigation. Recovery uses deliberately
+expired credentials, then restores the provider and clicks Retry. A 401/404 for the initial valid
+device is reported as pending for the live-device scenario. No real approval task is required.
 
 ## Tests
 
