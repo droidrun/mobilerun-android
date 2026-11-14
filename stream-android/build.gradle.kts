@@ -6,6 +6,8 @@ android {
     namespace = "ai.mobilerun.stream.android"
     compileSdk = 36
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -37,6 +39,7 @@ kotlin {
 dependencies {
     api(project(":protocol"))
     api(project(":stream-core"))
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
     // The OkHttpClient is part of StreamConfig.
     api(libs.okhttp)
@@ -44,6 +47,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.robolectric)
 
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(libs.androidx.test.junit)
