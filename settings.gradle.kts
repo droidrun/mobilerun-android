@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "mobilerun-android"
 include(":protocol")
 include(":stream-core")
+include(":stream-android")
