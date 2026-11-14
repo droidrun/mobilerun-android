@@ -28,7 +28,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -64,7 +63,7 @@ class DeviceStreamViewE2eTest {
     fun connect() = runBlocking {
         val device = E2eDevice.load(context)
         session = DeviceStreamSession(context, { device.credentials }, scope,
-            StreamConfig(), device.signalling)
+            StreamConfig(logger = { Log.i("StreamInputE2E", it) }), device.signalling)
         session.start()
         device.awaitConnectedWithVideo(session)
         activity = instrumentation.startActivitySync(Intent(context, InputTestActivity::class.java)
@@ -250,7 +249,8 @@ class DeviceStreamViewE2eTest {
         val returnedHome = shot("keys-10-home")
         assertChanged(back, returnedHome, "HOME returns to launcher")
         ui { view.hasControl = false; view.sendSystemKey(SystemKey.RECENT) }
-        assertContentEquals(screenshotCrop(returnedHome), screenshotCrop(shot("keys-11-display-only")),
+        val displayOnly = shot("keys-11-display-only")
+        assertTrue(screenshotCrop(returnedHome).contentEquals(screenshotCrop(displayOnly)),
             "display-only suppresses input; the content crop stays identical")
     }
 }
