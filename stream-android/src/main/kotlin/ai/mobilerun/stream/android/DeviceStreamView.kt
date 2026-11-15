@@ -319,8 +319,8 @@ public class DeviceStreamView @JvmOverloads public constructor(
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!onCheckIsTextEditor()) return null
-        // NO_SUGGESTIONS makes Gboard Pinyin commit Latin keystrokes instead of offering
-        // CJK candidates. Keep a normal text editor; the connection buffers composition locally.
+        // Keep normal text-editor capabilities for CJK candidates and emoji.
+        // The connection buffers composition locally until the IME finalizes it.
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
