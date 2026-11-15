@@ -2,6 +2,27 @@
 
 Kotlin library for embedding Mobilerun device streaming and events.
 
+## Quick start (from source)
+
+Clone this repository and open it in Android Studio with JDK 17 and Android SDK 36.
+Until publication, use the source modules: add `implementation(project(":stream-compose"))` to your Android app.
+Obtain short-lived stream credentials from your integrator backend; never put an API key in the app.
+Create and close a session with your screen's lifetime, then embed the default UI:
+
+```kotlin
+val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+val session = DeviceStreamSession(context, credentials = { backend.streamCredentials() }, scope = scope)
+session.start()
+// Inside your composable:
+StreamTheme { DeviceStream(session, Modifier.fillMaxSize()) }
+// When the screen is disposed:
+session.close()
+scope.cancel()
+```
+
+`backend.streamCredentials()` returns `StreamCredentials(streamUrl, streamToken)` or null while not ready.
+For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](TESTING.md).
+
 ## Status: pre-release
 
 The headless core, Android connection layer and interactive video view exist. The optional default UI, approval controller and white-label theme exist; nothing is published.

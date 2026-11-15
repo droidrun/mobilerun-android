@@ -24,6 +24,8 @@ jobs:
           git diff --exit-code -- protocol/src/commonMain/kotlin/ai/mobilerun/stream/protocol/Constants.kt
       - name: Check
         run: ./gradlew check --no-daemon
+      - name: Build sample
+        run: ./gradlew :sample:assembleDebug --no-daemon
       - name: Build unsigned publications locally
         run: ./gradlew publishToMavenLocal -PsignAllPublications=false
       - name: Verify and list artifacts
