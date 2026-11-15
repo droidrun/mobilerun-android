@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.StreamStats
 import ai.mobilerun.stream.core.PeerConfiguration
 import ai.mobilerun.stream.core.PeerConnectionState
 import ai.mobilerun.stream.core.PeerListener
@@ -12,6 +13,7 @@ import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
 import ai.mobilerun.stream.protocol.IceServer
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.webrtc.RTCStatsReport
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -38,7 +40,7 @@ internal class WebRtcPeerTransportFactory(
         configuration: PeerConfiguration,
         channels: List<DataChannelSpec>,
         listener: PeerListener,
-    ): PeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec)
+    ): WebRtcPeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec)
 }
 
 /** One libwebrtc peer connection: recvonly audio and video, the negotiated data channels. */
@@ -62,8 +64,26 @@ internal class WebRtcPeerTransport(
     @Volatile private var closed = false
     @Volatile private var videoTrack: VideoTrack? = null
     @Volatile private var audioTrack: AudioTrack? = null
+    /** Called only by the session sampler on its serial context. */
+    suspend fun sampleStats(parser: StreamStatsParser): StreamStats? {
+        if (closed) return null
+        val report = statsReport()
+        if (closed || connectionState != PeerConnectionState.Connected) return null
+        val types = setOf("inbound-rtp", "transport", "candidate-pair", "local-candidate", "remote-candidate", "codec")
+        return parser.parse(report.statsMap.values.filter { it.type in types }.map {
+            StatsRecord(it.id, it.type, it.timestampUs, it.members)
+        }, media.firstFrameMs)
+    }
+
+    /** Native report access for the sampler and instrumentation recording. */
+    internal suspend fun statsReport(): RTCStatsReport = suspendCancellableCoroutine { continuation ->
+        peerConnection.getStats { report ->
+            if (continuation.isActive) continuation.resume(report)
+        }
+    }
 
     init {
+        WebRtcRuntime.activePeers.incrementAndGet()
         try {
             peerConnection.addTransceiver(
                 MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
@@ -170,8 +190,12 @@ internal class WebRtcPeerTransport(
         runCatching { peerConnection.close() }
         // Native disposal waits a moment so that a renderer can still detach from the track.
         WebRtcRuntime.disposeLater {
-            channels.values.forEach { it.dispose() }
-            peerConnection.dispose()
+            try {
+                channels.values.forEach { it.dispose() }
+                peerConnection.dispose()
+            } finally {
+                WebRtcRuntime.activePeers.decrementAndGet()
+            }
         }
     }
 

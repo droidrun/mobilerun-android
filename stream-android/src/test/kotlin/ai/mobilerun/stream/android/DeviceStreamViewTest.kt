@@ -144,6 +144,7 @@ class DeviceStreamViewTest {
         mouse: Boolean = false,
         flags: Int = 0,
         buttons: Int = if (mouse) MotionEvent.BUTTON_PRIMARY else 0,
+        actionButton: Int = 0,
         horizontal: Float = 0f,
         vertical: Float = 0f,
     ): Boolean {
@@ -161,6 +162,8 @@ class DeviceStreamViewTest {
         val event = MotionEvent.obtain(0, 0, action, points.size, properties, coordinates,
             0, buttons, 1f, 1f, 0, 0,
             if (mouse) InputDevice.SOURCE_MOUSE else InputDevice.SOURCE_TOUCHSCREEN, flags)
+        if (actionButton != 0) event.javaClass.getMethod("setActionButton", Int::class.javaPrimitiveType)
+            .invoke(event, actionButton)
         return try {
             when (action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> view.onHoverEvent(event)
@@ -238,7 +241,7 @@ class DeviceStreamViewTest {
             ControlMessages.keycode(1, 29, metaState = 4096),
             ControlMessages.text("hello"), ControlMessages.keycode(0, 67), ControlMessages.keycode(1, 67),
             ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
-            ControlMessages.setClipboard("paste", true), ControlMessages.keycode(1, 50, metaState = 4096),
+            ControlMessages.setClipboard("paste", true),
             ControlMessages.keycode(0, 4), ControlMessages.keycode(1, 4),
             ControlMessages.keycode(0, 3), ControlMessages.keycode(1, 3),
             ControlMessages.keycode(0, 187), ControlMessages.keycode(1, 187))
@@ -258,6 +261,40 @@ class DeviceStreamViewTest {
         assertNull(view.onCreateInputConnection(EditorInfo()))
         p.control.assertSent()
         p.hover.assertSent()
+    }
+
+    @Test
+    fun controlKeyEventsWithProducedNewlineAndTabRetainPhysicalIdentityAndMeta() = withView { view, peer, _ ->
+        for ((code, text, meta) in listOf(Triple(KeyEvent.KEYCODE_ENTER, '\n', 0),
+            Triple(KeyEvent.KEYCODE_NUMPAD_ENTER, '\n', 0),
+            Triple(KeyEvent.KEYCODE_TAB, '\t', KeyEvent.META_SHIFT_ON))) {
+            peer.control.clear()
+            for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+                val event = object : KeyEvent(0, 0, action, code, 0, meta) {
+                    override fun getUnicodeChar(metaState: Int): Int = text.code
+                }
+                assertEquals(text.code, event.getUnicodeChar(meta))
+                assertTrue(view.dispatchKeyEvent(event))
+            }
+            peer.control.assertSent(ControlMessages.keycode(0, code, metaState = meta),
+                ControlMessages.keycode(1, code, metaState = meta))
+        }
+    }
+
+    @Test
+    fun noVideoGeometryDropsPointerInput() = withView { view, peer, _ ->
+        view.updateGeometry(null)
+        assertFalse(motion(view, MotionEvent.ACTION_DOWN))
+        assertFalse(motion(view, MotionEvent.ACTION_MOVE, mouse = true))
+        peer.control.assertSent()
+    }
+
+    @Test
+    fun mouseReleaseWithSecondaryActionButtonStillReleasesPrimaryDrag() = withView { view, peer, _ ->
+        motion(view, MotionEvent.ACTION_DOWN, mouse = true)
+        motion(view, MotionEvent.ACTION_UP, mouse = true, buttons = 0,
+            actionButton = MotionEvent.BUTTON_SECONDARY)
+        peer.control.assertSent(touch(0, -1, 250.0, 200.0), touch(1, -1, 250.0, 200.0))
     }
 
     @Test

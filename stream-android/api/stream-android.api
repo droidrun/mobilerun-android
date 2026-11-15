@@ -2,6 +2,7 @@ public final class ai/mobilerun/stream/android/DeviceStreamSession {
 	public fun <init> (Landroid/content/Context;Lai/mobilerun/stream/core/StreamCredentialsProvider;Lkotlinx/coroutines/CoroutineScope;Lai/mobilerun/stream/android/StreamConfig;)V
 	public synthetic fun <init> (Landroid/content/Context;Lai/mobilerun/stream/core/StreamCredentialsProvider;Lkotlinx/coroutines/CoroutineScope;Lai/mobilerun/stream/android/StreamConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun close ()V
+	public final fun getStats ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStatus ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getVideoSize ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun handleWake ()V

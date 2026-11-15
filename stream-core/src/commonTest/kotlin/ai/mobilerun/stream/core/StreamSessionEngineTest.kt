@@ -515,6 +515,45 @@ class StreamSessionEngineTest {
         assertEquals(before + 1, h.signalling.sockets.size)
     }
 
+    @Test
+    fun hungInitialProviderTimesOutAndPollingCanRecover() = runTest {
+        val h = Harness(this)
+        h.gate = CompletableDeferred()
+        h.engine.start()
+        h.settle()
+        h.advance(ReconnectPolicy.CONNECT_TIMEOUT_MS)
+        assertTrue(h.log.contains("credentials timeout"))
+        assertEquals(0, h.signalling.sockets.size)
+        h.gate = null
+        h.advance(CREDENTIALS_POLL_INTERVAL_MS)
+        assertEquals(2, h.credentialCalls)
+        assertEquals(1, h.signalling.sockets.size)
+        h.engine.close()
+        h.settle()
+        val calls = h.credentialCalls
+        h.advance(120_000)
+        assertEquals(calls, h.credentialCalls)
+    }
+
+    @Test
+    fun wakeAndRetryWorkWhileRefreshProviderIsHung() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.gate = CompletableDeferred()
+        h.socket.serverCloses()
+        h.settle()
+        val calls = h.credentialCalls
+        h.engine.handleWake()
+        h.settle()
+        assertEquals(2, h.signalling.sockets.size, "wake remounts independently of the provider")
+        h.advance(ReconnectPolicy.CONNECT_TIMEOUT_MS)
+        assertTrue(h.log.contains("credentials timeout"))
+        assertEquals(calls, h.credentialCalls, "one refresh at a time")
+        h.engine.close()
+        h.settle()
+        assertTrue(h.signalling.sockets.all { it.isClosed })
+    }
+
     // ---- credentials ----
 
     @Test

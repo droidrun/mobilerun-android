@@ -1,0 +1,154 @@
+[
+  {
+    "video": {
+      "type": "inbound-rtp",
+      "timestampUs": 1000000,
+      "members": {
+        "kind": "video",
+        "transportId": "transport",
+        "codecId": "codec",
+        "frameWidth": 1080,
+        "frameHeight": 2400,
+        "framesPerSecond": 30,
+        "bytesReceived": 100000,
+        "framesDecoded": 30,
+        "jitterBufferDelay": 0.3,
+        "jitterBufferEmittedCount": 30,
+        "totalDecodeTime": 0.06,
+        "packetsLost": 2,
+        "framesDropped": 3,
+        "freezeCount": 1
+      }
+    },
+    "transport": {
+      "type": "transport",
+      "timestampUs": 1000000,
+      "members": {
+        "selectedCandidatePairId": "pair"
+      }
+    },
+    "pair": {
+      "type": "candidate-pair",
+      "timestampUs": 1000000,
+      "members": {
+        "localCandidateId": "local",
+        "remoteCandidateId": "remote",
+        "currentRoundTripTime": 0.024
+      }
+    },
+    "local": {
+      "type": "local-candidate",
+      "timestampUs": 1000000,
+      "members": {
+        "candidateType": "relay"
+      }
+    },
+    "remote": {
+      "type": "remote-candidate",
+      "timestampUs": 1000000,
+      "members": {
+        "candidateType": "srflx"
+      }
+    },
+    "codec": {
+      "type": "codec",
+      "timestampUs": 1000000,
+      "members": {
+        "mimeType": "video/H264"
+      }
+    },
+    "unused": {
+      "type": "candidate-pair",
+      "timestampUs": 1000000,
+      "members": {
+        "nominated": true,
+        "state": "succeeded",
+        "currentRoundTripTime": 9
+      }
+    },
+    "audio": {
+      "type": "inbound-rtp",
+      "timestampUs": 1000000,
+      "members": {
+        "kind": "audio",
+        "bytesReceived": 999999
+      }
+    }
+  },
+  {
+    "video": {
+      "type": "inbound-rtp",
+      "timestampUs": 2000000,
+      "members": {
+        "kind": "video",
+        "transportId": "transport",
+        "codecId": "codec",
+        "frameWidth": 1080,
+        "frameHeight": 2400,
+        "framesPerSecond": 30,
+        "bytesReceived": 225000,
+        "framesDecoded": 60,
+        "jitterBufferDelay": 0.75,
+        "jitterBufferEmittedCount": 60,
+        "totalDecodeTime": 0.15,
+        "packetsLost": 2,
+        "framesDropped": 3,
+        "freezeCount": 1
+      }
+    },
+    "transport": {
+      "type": "transport",
+      "timestampUs": 1000000,
+      "members": {
+        "selectedCandidatePairId": "pair"
+      }
+    },
+    "pair": {
+      "type": "candidate-pair",
+      "timestampUs": 1000000,
+      "members": {
+        "localCandidateId": "local",
+        "remoteCandidateId": "remote",
+        "currentRoundTripTime": 0.024
+      }
+    },
+    "local": {
+      "type": "local-candidate",
+      "timestampUs": 1000000,
+      "members": {
+        "candidateType": "relay"
+      }
+    },
+    "remote": {
+      "type": "remote-candidate",
+      "timestampUs": 1000000,
+      "members": {
+        "candidateType": "srflx"
+      }
+    },
+    "codec": {
+      "type": "codec",
+      "timestampUs": 1000000,
+      "members": {
+        "mimeType": "video/H264"
+      }
+    },
+    "unused": {
+      "type": "candidate-pair",
+      "timestampUs": 1000000,
+      "members": {
+        "nominated": true,
+        "state": "succeeded",
+        "currentRoundTripTime": 9
+      }
+    },
+    "audio": {
+      "type": "inbound-rtp",
+      "timestampUs": 1000000,
+      "members": {
+        "kind": "audio",
+        "bytesReceived": 999999
+      }
+    }
+  }
+]

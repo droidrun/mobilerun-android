@@ -8,7 +8,6 @@ import ai.mobilerun.stream.core.KeyInput
 import ai.mobilerun.stream.core.PointerInput
 import ai.mobilerun.stream.core.VideoSize
 import ai.mobilerun.stream.protocol.AndroidKeys
-import ai.mobilerun.stream.protocol.ControlMessages
 import android.content.ClipboardManager
 import android.os.Build
 import android.content.Context
@@ -60,6 +59,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
     private var inputGeneration = 0
     private var moveScheduled = false
     private val pointers = PointerInput(::sendControl)
+    private val keys = KeyInput()
     private val flushMoves = Runnable {
         moveScheduled = false
         pointers.flushMoves()
@@ -256,14 +256,13 @@ public class DeviceStreamView @JvmOverloads public constructor(
             return super.onGenericMotionEvent(event)
         }
         val rect = geometry ?: return super.onGenericMotionEvent(event)
-        val point = rect.map(event.x.toDouble(), event.y.toDouble())
-            ?: return super.onGenericMotionEvent(event)
         // Android axes are ticks; invert horizontal like React (positive means left on the wire).
-        sendControl(ControlMessages.scroll(
-            rect.videoWidth, rect.videoHeight, point.x, point.y,
+        val bytes = rect.scroll(
+            event.x.toDouble(), event.y.toDouble(),
             -event.getAxisValue(MotionEvent.AXIS_HSCROLL).toDouble(),
             event.getAxisValue(MotionEvent.AXIS_VSCROLL).toDouble(), event.buttonState,
-        ))
+        ) ?: return super.onGenericMotionEvent(event)
+        sendControl(bytes)
         return true
     }
 
@@ -276,10 +275,9 @@ public class DeviceStreamView @JvmOverloads public constructor(
     private fun sendHover(event: MotionEvent): Boolean {
         if (!hasControl) return false
         val rect = geometry ?: return false
-        val point = rect.map(event.x.toDouble(), event.y.toDouble()) ?: return false
-        return session?.sendHover(ControlMessages.hover(
-            rect.videoWidth, rect.videoHeight, point.x, point.y, event.buttonState,
-        )) == true
+        if (pointers.isActive(PointerInput.MOUSE_ID)) return false
+        val bytes = rect.hover(event.x.toDouble(), event.y.toDouble(), event.buttonState) ?: return false
+        return session?.sendHover(bytes) == true
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
@@ -302,7 +300,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
         if (event.isAltPressed) meta = meta or AndroidKeys.META_ALT_ON
         if (event.isCtrlPressed) meta = meta or AndroidKeys.META_CTRL_ON
         if (event.isMetaPressed) meta = meta or AndroidKeys.META_META_ON
-        return KeyInput.route(
+        return keys.route(
             event.keyCode, text, event.action == KeyEvent.ACTION_DOWN, meta,
             clipboard = ::primaryClipText, send = ::sendControl, capsLock = event.isCapsLockOn,
         )
@@ -349,6 +347,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
     }
 
     private fun invalidateInput() {
+        keys.reset()
         inputGeneration++
         removeCallbacks(flushMoves)
         moveScheduled = false

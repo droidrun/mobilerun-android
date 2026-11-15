@@ -78,6 +78,24 @@ public final class ai/mobilerun/stream/core/StreamNotConnectedException : java/l
 	public synthetic fun <init> (Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 }
 
+public final class ai/mobilerun/stream/core/StreamStats {
+	public final fun getBitrateKbps ()Ljava/lang/Double;
+	public final fun getCodec ()Ljava/lang/String;
+	public final fun getDecodeTimeMs ()Ljava/lang/Double;
+	public final fun getFps ()Ljava/lang/Double;
+	public final fun getFramesDropped ()Ljava/lang/Long;
+	public final fun getFreezeCount ()Ljava/lang/Long;
+	public final fun getHeight ()Ljava/lang/Integer;
+	public final fun getJitterBufferDelayMs ()Ljava/lang/Double;
+	public final fun getLocalCandidateType ()Ljava/lang/String;
+	public final fun getPacketsLost ()Ljava/lang/Long;
+	public final fun getRemoteCandidateType ()Ljava/lang/String;
+	public final fun getRttMs ()Ljava/lang/Double;
+	public final fun getTimeToFirstFrameMs ()Ljava/lang/Double;
+	public final fun getWidth ()Ljava/lang/Integer;
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class ai/mobilerun/stream/core/StreamStatus {
 }
 

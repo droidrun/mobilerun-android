@@ -251,7 +251,10 @@ public class StreamSessionEngine(
 
     private suspend fun fetchCredentials(): StreamCredentials? =
         try {
-            credentials.credentials()
+            withTimeout(ReconnectPolicy.CONNECT_TIMEOUT_MS) { credentials.credentials() }
+        } catch (_: TimeoutCancellationException) {
+            log("credentials timeout")
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -593,7 +596,7 @@ public class StreamSessionEngine(
                 else -> {
                     restartRecheck?.cancel()
                     restartRecheck = null
-                    controller.handleDisconnected()
+                            controller.handleDisconnected()
                 }
             }
         }

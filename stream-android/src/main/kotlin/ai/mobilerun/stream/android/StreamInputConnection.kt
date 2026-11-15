@@ -4,8 +4,8 @@
 package ai.mobilerun.stream.android
 
 import ai.mobilerun.stream.core.KeyInput
+import ai.mobilerun.stream.core.ImeInput
 import ai.mobilerun.stream.protocol.AndroidKeys
-import ai.mobilerun.stream.protocol.ControlMessages
 import android.text.Editable
 import android.text.SpannableStringBuilder
 import android.view.KeyEvent
@@ -31,21 +31,7 @@ internal class StreamInputConnection(
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         if (!canSend()) return false
-        val chunk = StringBuilder()
-        fun flush() {
-            if (chunk.isNotEmpty()) send(ControlMessages.text(chunk.toString()))
-            chunk.clear()
-        }
-        for (character in (text ?: "")) {
-            when {
-                character == '\n' || character == '\t' -> {
-                    flush()
-                    KeyInput.press(if (character == '\n') AndroidKeys.ENTER else KeyEvent.KEYCODE_TAB, send)
-                }
-                !character.isISOControl() -> chunk.append(character)
-            }
-        }
-        flush()
+        ImeInput.commit(text?.toString().orEmpty(), send)
         buffer.clear()
         removeComposingSpans(buffer)
         return true
@@ -59,8 +45,7 @@ internal class StreamInputConnection(
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (!canSend() || beforeLength < 0 || afterLength < 0) return false
         if (buffer.isNotEmpty()) return super.deleteSurroundingText(beforeLength, afterLength)
-        repeat(beforeLength.coerceAtMost(64)) { KeyInput.press(AndroidKeys.DEL, send) }
-        repeat(afterLength.coerceAtMost(64)) { KeyInput.press(AndroidKeys.FORWARD_DEL, send) }
+        ImeInput.delete(beforeLength, afterLength, send)
         return true
     }
 

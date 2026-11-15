@@ -48,6 +48,8 @@ extra=()
 [ -n "${TAP_X:-}" ] && extra+=(-e tapX "$TAP_X" -e tapY "${TAP_Y:?set TAP_Y with TAP_X}")
 [ -n "${TEXT_X:-}" ] && extra+=(-e textX "$TEXT_X" -e textY "${TEXT_Y:?set TEXT_Y with TEXT_X}")
 [ -n "${OPEN_URL:-}" ] && extra+=(-e openUrl "$OPEN_URL")
+[ -n "${BENCHMARK_RUNS:-}" ] && extra+=(-e benchmarkRuns "$BENCHMARK_RUNS")
+[ -n "${BENCHMARK_SAMPLES:-}" ] && extra+=(-e benchmarkSamples "$BENCHMARK_SAMPLES")
 
 adb logcat -c
 status=0

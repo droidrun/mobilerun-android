@@ -10,6 +10,7 @@ import org.webrtc.EglBase
 import org.webrtc.PeerConnectionFactory
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The process-wide WebRTC state: one [PeerConnectionFactory] and one [EglBase], shared by every
@@ -19,6 +20,8 @@ import java.util.concurrent.TimeUnit
  * releases only its own peer connection, data channels and tracks.
  */
 internal object WebRtcRuntime {
+    /** Internal resource accounting for instrumentation teardown assertions. */
+    val activePeers = AtomicInteger()
     /** How long a closed peer connection stays allocated so that renderers can detach from its track. */
     private const val DISPOSE_DELAY_MS = 1_000L
 

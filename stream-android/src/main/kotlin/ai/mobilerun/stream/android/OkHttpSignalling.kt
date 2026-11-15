@@ -15,8 +15,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-private const val NORMAL_CLOSURE = 1000
-
 /** The WebSocket URL with the token as the `token` query parameter (replacing an existing one). */
 internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
     // OkHttp only knows http(s); it upgrades to ws(s) itself.
@@ -37,42 +35,46 @@ internal class OkHttpSignallingTransportFactory(private val client: OkHttpClient
 }
 
 /** A signalling WebSocket on OkHttp. After [close] or the first end event it reports nothing more. */
-internal class OkHttpSignallingTransport(private val listener: SignallingListener) :
+internal class OkHttpSignallingTransport(listener: SignallingListener) :
     WebSocketListener(), SignallingTransport {
     @Volatile lateinit var socket: WebSocket
 
+    @Volatile private var listener: SignallingListener? = listener
     @Volatile private var finished = false
 
     override fun send(text: String): Boolean = !finished && socket.send(text)
 
     override fun close() {
         finished = true
-        // OkHttp cancels a close the peer never answers by itself.
-        socket.close(NORMAL_CLOSURE, null)
+        // Preserve the protocol CLOSE frame without retaining the session during the handshake.
+        listener = null
+        socket.close(1000, null)
     }
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
         socket = webSocket
-        if (!finished) listener.onOpen()
+        if (!finished) listener?.onOpen()
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
-        if (!finished) listener.onMessage(text)
+        if (!finished) listener?.onMessage(text)
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
         webSocket.close(code, null)
-        end { listener.onClosed() }
+        end { it.onClosed() }
     }
 
-    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end { listener.onClosed() }
+    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end { it.onClosed() }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) =
-        end { listener.onFailure(response?.code) }
+        end { it.onFailure(response?.code) }
 
-    private fun end(report: () -> Unit) {
+    private fun end(report: (SignallingListener) -> Unit) {
         if (finished) return
         finished = true
-        report()
+        val target = listener
+        listener = null
+        target?.let(report)
     }
 }
