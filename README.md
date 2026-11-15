@@ -154,7 +154,7 @@ Keycode DOWNs track physical identity; only matched keyups send UP, using curren
 and completed paste/menu shortcuts never produce orphan releases.
 The IME uses a normal text keyboard with suggestions/autocorrect disabled and the no-personalized-learning hint on Android 8+. If an IME composes anyway, composition
 stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and tab become ENTER/TAB; other
-committed control characters are dropped. The local input buffer does not mirror the remote editor,
+committed control characters are dropped. Committed IME runs containing non-ASCII characters use the existing clipboard/paste protocol so CJK and emoji reach Android editors; ASCII runs use text injection. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
 
 The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
@@ -317,7 +317,7 @@ local-renderer screenshots and logs. Runtime target selection belongs outside th
 
 
 The core uses the same protocol as [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react); input routing follows the shared conformance vectors v0.2.0 (React adoption pending). The protocol and recovery contract is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
-replay through the same pure keyboard, IME, pointer, geometry and scroll logic used by Android.
+replay through the shared keyboard, IME, pointer, geometry and scroll logic. The Android IME fixture suite separately pins the four Unicode cases that use clipboard/paste instead of key-character text injection.
 
 `scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default
 UI. The credential-free `DefaultUiGalleryTest` separately captures

@@ -6,6 +6,7 @@ package ai.mobilerun.stream.android
 import ai.mobilerun.stream.core.KeyInput
 import ai.mobilerun.stream.core.ImeInput
 import ai.mobilerun.stream.protocol.AndroidKeys
+import ai.mobilerun.stream.protocol.ControlMessages
 import android.text.Editable
 import android.text.SpannableStringBuilder
 import android.view.KeyEvent
@@ -31,7 +32,12 @@ internal class StreamInputConnection(
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         if (!canSend()) return false
-        ImeInput.commit(text?.toString().orEmpty(), send)
+        ImeInput.commit(text?.toString().orEmpty(), sendText = { committed ->
+            // Android's key-character injection cannot represent arbitrary Unicode. The existing
+            // clipboard/paste command preserves committed CJK and emoji without changing the IME.
+            send(if (committed.any { it.code > 0x7f }) ControlMessages.setClipboard(committed)
+                else ControlMessages.text(committed))
+        }, send = send)
         buffer.clear()
         removeComposingSpans(buffer)
         return true

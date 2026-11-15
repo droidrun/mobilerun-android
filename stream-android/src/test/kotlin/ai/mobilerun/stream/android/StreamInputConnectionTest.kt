@@ -55,6 +55,43 @@ class StreamInputConnectionTest {
     }
 
     @Test
+    fun recordedGboardCommitsSendUnicodeOnceAndKeepEditingKeys() {
+        // Gboard trace: query editable, finish empty composition, commit a letter, space, emoji.
+        assertTrue(connection.editable.isEmpty())
+        connection.finishComposingText()
+        connection.commitText("q", 1)
+        connection.commitText(" ", 1)
+        connection.commitText("👍", 1)
+        connection.finishComposingText()
+        connection.deleteSurroundingText(1, 0)
+        connection.performEditorAction(EditorInfo.IME_ACTION_DONE)
+        messages.assertSent(
+            ControlMessages.text("q"), ControlMessages.text(" "),
+            ControlMessages.setClipboard("👍"),
+            ControlMessages.keycode(0, 67), ControlMessages.keycode(1, 67),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+        )
+    }
+
+    @Test
+    fun cjkCompositionCommitsOnceAndMixedUnicodeControlsStayKeys() {
+        connection.setComposingText("zhong", 1)
+        connection.setComposingText("中文", 1)
+        assertTrue(messages.isEmpty())
+        connection.commitText("中文", 1)
+        connection.finishComposingText()
+        connection.commitText("👋\r\n中文\tend", 1)
+        messages.assertSent(
+            ControlMessages.setClipboard("中文"),
+            ControlMessages.setClipboard("👋"),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+            ControlMessages.setClipboard("中文"),
+            ControlMessages.keycode(0, 61), ControlMessages.keycode(1, 61),
+            ControlMessages.text("end"),
+        )
+    }
+
+    @Test
     fun largeDeleteRequestsAreBounded() {
         connection.deleteSurroundingText(Int.MAX_VALUE, Int.MAX_VALUE)
         assertEquals(256, messages.size)

@@ -10,10 +10,14 @@ import ai.mobilerun.stream.protocol.ControlMessages
 @InternalStreamApi
 public object ImeInput {
     /** Sends printable runs, normalizes CRLF/CR/LF to Enter, and sends Tab as a key press. */
-    public fun commit(text: String, send: (ByteArray) -> Unit) {
+    public fun commit(text: String, send: (ByteArray) -> Unit): Unit =
+        commit(text, sendText = { send(ControlMessages.text(it)) }, send = send)
+
+    /** Uses the host's text emitter while retaining shared control-character handling. */
+    public fun commit(text: String, sendText: (String) -> Unit, send: (ByteArray) -> Unit) {
         val chunk = StringBuilder()
         fun flush() {
-            if (chunk.isNotEmpty()) send(ControlMessages.text(chunk.toString()))
+            if (chunk.isNotEmpty()) sendText(chunk.toString())
             chunk.clear()
         }
         var index = 0

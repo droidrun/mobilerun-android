@@ -20,6 +20,17 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class ImeFixturesTest {
+    // The shared vectors encode INJECT_TEXT. Android's IME uses SET_CLIPBOARD/paste for
+    // Unicode that the remote key-character injector cannot type. Pin those wire bytes here;
+    // keep exercising every native composition/control vector and the unchanged shared fixtures.
+    private val unicodePaste = mapOf(
+        "unicode" to listOf("090000000000000000010000000cc3a9e4b8adf09f988065cc81"),
+        "unicode line separators printable" to listOf("090000000000000000010000000961e280a862e280a963"),
+        "lone surrogate replacement" to listOf(
+            "090000000000000000010000000461efbfbd", "00003d0000000000000000000000",
+            "00013d0000000000000000000000", "010100000062"),
+        "composition finalized" to listOf("090000000000000000010000000de697a5e69cace8aa9ef09f9880"),
+    )
     @Test fun allImeVectors() {
         val file = "input/ime.json"
         val cases = Json.parseToJsonElement(File(requireNotNull(System.getProperty("conformance.fixtures")), file)
@@ -50,7 +61,7 @@ class ImeFixturesTest {
                 it.jsonObject.getValue("channel").jsonPrimitive.content to
                     it.jsonObject.getValue("hex").jsonPrimitive.content
             }
-            assertEquals(expected, messages, name)
+            assertEquals(unicodePaste[name]?.map { "control" to it } ?: expected, messages, name)
             input.closeConnection()
         }
     }
