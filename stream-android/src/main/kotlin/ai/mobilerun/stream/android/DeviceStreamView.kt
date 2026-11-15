@@ -15,6 +15,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.text.InputType
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.KeyCharacterMap
 import android.view.MotionEvent
@@ -60,6 +61,9 @@ public class DeviceStreamView @JvmOverloads public constructor(
     private var moveScheduled = false
     private val pointers = PointerInput(::sendControl)
     private val keys = KeyInput()
+    private val clicks = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapUp(event: MotionEvent): Boolean = true
+    })
     private val flushMoves = Runnable {
         moveScheduled = false
         pointers.flushMoves()
@@ -234,7 +238,6 @@ public class DeviceStreamView @JvmOverloads public constructor(
                 else pointers.up(pointerId)
                 if (event.actionMasked == MotionEvent.ACTION_UP) {
                     parent?.requestDisallowInterceptTouchEvent(false)
-                    performClick()
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -243,11 +246,13 @@ public class DeviceStreamView @JvmOverloads public constructor(
             }
             else -> return false
         }
+        if (clicks.onTouchEvent(event)) performClick()
         return true
     }
 
     override fun performClick(): Boolean {
         super.performClick()
+        showKeyboard()
         return true
     }
 
