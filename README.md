@@ -152,7 +152,7 @@ Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shif
 Ctrl/Command+M presses Menu. Single graphemes, including emoji and combining sequences, inject their produced text without normalization.
 Keycode DOWNs track physical identity; only matched keyups send UP, using current modifiers. Text
 and completed paste/menu shortcuts never produce orphan releases.
-The IME uses a normal text keyboard with suggestions/autocorrect disabled and the no-personalized-learning hint on Android 8+. If an IME composes anyway, composition
+The IME uses a normal text keyboard so CJK layouts can offer conversion candidates, with the no-personalized-learning hint on Android 8+. Composition
 stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and tab become ENTER/TAB; other
 committed control characters are dropped. Committed IME runs containing non-ASCII characters use the existing clipboard/paste protocol so CJK and emoji reach Android editors; ASCII runs use text injection. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.

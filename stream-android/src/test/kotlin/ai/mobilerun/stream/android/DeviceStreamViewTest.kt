@@ -224,7 +224,7 @@ class DeviceStreamViewTest {
         assertFalse(view.onKeyDown(KeyEvent.KEYCODE_BACK, KeyEvent(0, KeyEvent.KEYCODE_BACK)))
         val info = EditorInfo()
         val input = assertNotNull(view.onCreateInputConnection(info))
-        assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, info.inputType)
+        assertEquals(InputType.TYPE_CLASS_TEXT, info.inputType, "CJK conversion must not be disabled by NO_SUGGESTIONS or password variations")
         assertTrue(info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0)
         input.setComposingText("hello", 1)
         input.finishComposingText()
