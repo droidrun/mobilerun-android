@@ -12,12 +12,15 @@ androidx-test-runner = "1.7.0"
 compose = "1.9.5"
 robolectric = "4.16.1"
 lifecycle = "2.10.0"
+# Stable upload 2026-02-11. Used by the sample activity host.
+activity = "1.12.4"
 
 # Maven Central uploads: 2026-06-21 and 2026-09-02 (both older than seven days).
 maven-publish = "0.37.0"
 binary-compatibility-validator = "0.18.2"
 
 [libraries]
+androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }

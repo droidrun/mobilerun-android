@@ -41,6 +41,8 @@ for ((i=0; i<180; i++)); do
   sleep 1
 done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { echo "Emulator boot timed out" >&2; exit 1; }
+adb shell wm size reset
+adb shell wm density reset
 adb install -r sample/build/outputs/apk/debug/sample-debug.apk
 adb shell am force-stop "$pkg"
 adb shell run-as "$pkg" mkdir -p files

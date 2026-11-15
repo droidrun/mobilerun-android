@@ -23,7 +23,8 @@ Create a local JSON file outside the checkout (do not commit it):
 scripts/run-sample.sh /path/to/credentials.json
 ```
 
-The script builds the debug sample, boots the first configured AVD, installs it,
+The script builds the debug sample, boots the first configured AVD, resets its
+display size/density overrides, installs it,
 and streams the JSON into the app's private storage through `adb run-as`. The app
 consumes and deletes that file at launch. `SAMPLE_AVD` selects a specific AVD;
 `SAMPLE_EMULATOR_PORT` selects an unused even port (default 5582). If installed,
