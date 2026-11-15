@@ -3,6 +3,7 @@
 
 package ai.mobilerun.sample
 
+import ai.mobilerun.stream.core.StreamCredentials
 import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,7 +17,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val state = ViewModelProvider(this)[SampleLaunchState::class.java]
         setContentView(ComposeView(this).apply {
-            setContent { SampleApp(state.credentials, state.loadFailed) { state.credentials = it } }
+            setContent { SampleApp(state.credentials, state.loadFailed) { state.updateCredentials(it) } }
         })
     }
 }
@@ -26,6 +27,12 @@ class SampleLaunchState(application: Application) : AndroidViewModel(application
     private val file = File(application.filesDir, "stream-e2e.json")
     private val loaded = runCatching { if (file.exists()) parseCredentials(file.readText()) else null }
     var credentials = loaded.getOrNull()
-    val loadFailed = loaded.isFailure
+    var loadFailed = loaded.isFailure
+        private set
+
+    fun updateCredentials(value: StreamCredentials) {
+        credentials = value
+        loadFailed = false
+    }
     init { file.delete() }
 }

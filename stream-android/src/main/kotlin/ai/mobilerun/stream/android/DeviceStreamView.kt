@@ -319,9 +319,8 @@ public class DeviceStreamView @JvmOverloads public constructor(
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!onCheckIsTextEditor()) return null
-        // Keep normal text-editor capabilities for CJK candidates and emoji.
-        // The connection buffers composition locally until the IME finalizes it.
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT
+        // Prefer per-character Latin commits; composition remains local until finalized.
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING

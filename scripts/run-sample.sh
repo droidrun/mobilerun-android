@@ -5,14 +5,10 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 creds="${1:?usage: scripts/run-sample.sh CREDENTIALS_JSON}"
 [ -f "$creds" ] || { echo "Credentials file not found" >&2; exit 2; }
 creds="$(cd "$(dirname "$creds")" && pwd)/$(basename "$creds")"
-# Keep the host's build/emulator lock for the entire interactive session.
-if [ "${SAMPLE_HEAVY_LOCKED:-}" != 1 ] && [ -x "$HOME/.local/bin/mr-heavy" ]; then
-  exec "$HOME/.local/bin/mr-heavy" env SAMPLE_HEAVY_LOCKED=1 "$0" "$creds"
-fi
 : "${ANDROID_HOME:?set ANDROID_HOME to the Android SDK directory}"
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
 emulator="$ANDROID_HOME/emulator/emulator"
-avd="${SAMPLE_AVD:-$($emulator -list-avds | head -1)}"
+avd="${SAMPLE_AVD:-$("$emulator" -list-avds | sed -n '/^[A-Za-z0-9_.-][A-Za-z0-9_.-]*$/p' | head -1)}"
 [ -n "$avd" ] || { echo "Create an Android API 35+ AVD in Android Studio first" >&2; exit 2; }
 port="${SAMPLE_EMULATOR_PORT:-5582}"
 export ANDROID_SERIAL="emulator-$port"
@@ -24,9 +20,12 @@ fi
 pkg=ai.mobilerun.sample
 pid=""
 cleanup() {
-  adb shell run-as "$pkg" rm -f files/stream-e2e.json >/dev/null 2>&1 || true
-  adb emu kill >/dev/null 2>&1 || true
-  if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+  if [ -n "$pid" ]; then
+    adb shell run-as "$pkg" rm -f files/stream-e2e.json >/dev/null 2>&1 || true
+    adb emu kill >/dev/null 2>&1 || true
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
@@ -41,21 +40,10 @@ for ((i=0; i<180; i++)); do
   sleep 1
 done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { echo "Emulator boot timed out" >&2; exit 1; }
-adb shell wm size reset
-adb shell wm density reset
 adb install -r sample/build/outputs/apk/debug/sample-debug.apk
 adb shell am force-stop "$pkg"
 adb shell run-as "$pkg" mkdir -p files
-python3 -I - "$creds" <<'PY' | adb shell "run-as $pkg sh -c 'cat > files/stream-e2e.json'"
-import json, sys
-try:
-    with open(sys.argv[1]) as source:
-        d = json.load(source)
-    assert all(isinstance(d.get(k), str) and d[k].strip() for k in ('streamUrl', 'streamToken'))
-except Exception:
-    sys.exit('Credentials must contain nonblank streamUrl and streamToken strings')
-print(json.dumps({k: d[k] for k in ('streamUrl', 'streamToken')}))
-PY
+adb shell "run-as $pkg sh -c 'cat > files/stream-e2e.json'" < "$creds"
 adb shell am start -n "$pkg/.MainActivity" >/dev/null
 echo "Sample launched. Press Ctrl-C to stop the emulator and release the build lock."
 while kill -0 "$pid" 2>/dev/null; do sleep 2; done

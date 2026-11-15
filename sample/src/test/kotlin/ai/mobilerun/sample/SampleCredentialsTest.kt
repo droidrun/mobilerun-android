@@ -3,10 +3,16 @@
 
 package ai.mobilerun.sample
 
+import android.app.Application
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 class SampleCredentialsTest {
     @Test fun loadsTheE2eFormatAndRedactsLogging() {
         val credentials = parseCredentials("""{"streamUrl":"wss://example.test/stream", "streamToken":"private-token"}""")
@@ -15,18 +21,22 @@ class SampleCredentialsTest {
         assertEquals("StreamCredentials(url=<redacted>, token=<redacted>)", credentials.toString())
     }
 
-    @Test fun rejectsMissingUrl() {
-        assertFailsWith<IllegalArgumentException> { parseCredentials("""{"streamToken":"token"}""") }
+    @Test fun rejectsInvalidFields() {
+        val cases = listOf(
+            """{"streamToken":"token"}""",
+            """{"streamUrl":"wss://example.test"}""",
+            """{"streamUrl":" ","streamToken":"token"}""",
+            """{"streamUrl":"wss://example.test","streamToken":" "}""",
+            """{"streamUrl":123,"streamToken":"token"}""",
+            """{"streamUrl":"wss://example.test","streamToken":true}""",
+            """{"streamUrl":null,"streamToken":"token"}""",
+            """{"streamUrl":"wss://example.test","streamToken":{}}""",
+        )
+        cases.forEach { json ->
+            assertFailsWith<IllegalArgumentException> { parseCredentials(json) }
+        }
     }
-    @Test fun rejectsMissingToken() {
-        assertFailsWith<IllegalArgumentException> { parseCredentials("""{"streamUrl":"wss://example.test"}""") }
-    }
-    @Test fun rejectsBlankUrl() {
-        assertFailsWith<IllegalArgumentException> { parseCredentials("""{"streamUrl":" ","streamToken":"token"}""") }
-    }
-    @Test fun rejectsBlankToken() {
-        assertFailsWith<IllegalArgumentException> { parseCredentials("""{"streamUrl":"wss://example.test","streamToken":" "}""") }
-    }
+
     @Test fun malformedInputDoesNotExposeItsContents() {
         val failure = assertFailsWith<IllegalArgumentException> { parseCredentials("private-token") }
         assertEquals("Credentials must be a JSON object", failure.message)

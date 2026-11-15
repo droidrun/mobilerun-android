@@ -1,6 +1,6 @@
 # Try the Android SDK
 
-Requires JDK 17, Python 3, Android SDK platform 36 and build-tools (Gradle downloads
+Requires JDK 17, Android SDK platform 36 and build-tools (Gradle downloads
 its pinned toolchain dependencies), platform-tools, the Android emulator, and an
 API 35 or newer AVD. Android Studio's SDK Manager and Device Manager can install
 these. The SDK supports Android 7.0 (API 24) and newer; this guide uses API 35+.
@@ -9,10 +9,8 @@ The Gradle wrapper pins Gradle 9.6.0; Kotlin is 2.4.21 and AGP is 9.5.0.
 
 ## Credentials and launch
 
-Use an existing dev cloud device. Your integrator backend obtains its short-lived
-`streamUrl` and `streamToken` and supplies them to the app. For internal testing,
-a dev API key on a test account can call `GET /devices/{id}` through the dev API;
-copy the stream fields from that response. Never ship an API key in an app.
+Use a device in your Mobilerun account. Your backend fetches `streamUrl` and
+`streamToken` via the API and supplies them to the app. Never ship an API key in an app.
 Create a local JSON file outside the checkout (do not commit it):
 
 ```json
@@ -23,14 +21,11 @@ Create a local JSON file outside the checkout (do not commit it):
 scripts/run-sample.sh /path/to/credentials.json
 ```
 
-The script builds the debug sample, boots the first configured AVD, resets its
-display size/density overrides, installs it,
+The script builds the debug sample, boots the first configured AVD, installs the app,
 and streams the JSON into the app's private storage through `adb run-as`. The app
 consumes and deletes that file at launch. `SAMPLE_AVD` selects a specific AVD;
-`SAMPLE_EMULATOR_PORT` selects an unused even port (default 5582). If installed,
-`~/.local/bin/mr-heavy` holds the host's build/emulator lock for the entire run.
-Keep the script running while testing; Ctrl-C stops its emulator and releases the
-lock. It never uses an already running emulator. Close other instances of the
+`SAMPLE_EMULATOR_PORT` selects an unused even port (default 5582). Keep the script running while testing; Ctrl-C stops its emulator. It never uses
+an already running emulator. Close other instances of the
 selected AVD before launch. On a fresh machine, create an AVD before running.
 
 You can also launch the installed sample manually and paste both fields into its
@@ -50,7 +45,7 @@ the expected result. Remote state changes persist on that device.
 | Tap | The tapped remote control responds, including near the video's edges. |
 | Swipe | A scrollable remote page scrolls in the drag direction. |
 | Two-finger gesture | A zoomable page zooms; Android Emulator supports pinch with Ctrl (Command on macOS) or its multitouch controls. |
-| Type emoji and CJK | Focus a remote field, tap Keyboard to open the local IME, and enter `Hello 👋 中文`; committed text appears remotely. Install a suitable IME if needed. |
+| Type letters, emoji and CJK | Focus a remote field and tap the video to show the keyboard. Latin letters commit per character; CJK composition is finalized before sending. **Known limitation:** emoji and some CJK may not arrive; see below. Install a suitable IME if needed. |
 | Back / Home / Recent | Each navigation button performs the corresponding remote Android action. |
 | Rotate | Rotate the emulator using its toolbar; video remains fitted and touch mapping stays correct. Rotate the remote device too if its app supports it. |
 | Background / foreground | Press the emulator's Home, then reopen Stream sample; the stream resumes or recovers. |
@@ -61,11 +56,8 @@ the expected result. Remote state changes persist on that device.
 | Demo approval | Tap Demo approval: a 30-second countdown appears. Approve or Deny dismisses the card and shows the decision plus refetch count. Start again to try the other action. No real task is sent. |
 | Stats | Tap Stats: fps, payload kbit/s, RTT, jitter-buffer delay, ICE candidate types and first-frame time update. Missing values show —; Hide stats removes the panel. |
 
-Reference measurements from five connections: first frame 1.5–4.1 s, 38–56 fps,
-RTT 21–25 ms and static-screen video payload about 42 kbit/s. Pooled app-launch
-stimulus tap-region median/p90: 232/251 ms; separate central app-transition
-median/p90: 233/259 ms. These exclude display scanout and are reference values,
-not pass thresholds. Static content bitrate does not measure motion throughput.
+Typical values on an emulator over a relay connection: first frame ~3–4 s,
+~40–55 fps and tap-to-pixel ~230 ms.
 
 ## Automated checks
 
@@ -75,7 +67,7 @@ not pass thresholds. Static content bitrate does not measure motion throughput.
 ./gradlew :sample:testDebugUnitTest
 ```
 
-When a host has `mr-heavy`, wrap Gradle checks with it as well. The sample tests
+The sample tests
 cover JSON validation/redaction, theme tokens/labels and the local approval fake.
 The library suites cover streaming and input; see README for instrumented checks.
 
@@ -84,4 +76,9 @@ The library suites cover streaming and input; see README for instrumented checks
 Events subscriptions await a backend token contract. Publishing has not happened;
 use the source checkout. The sample credentials provider reuses the entered token;
 a production backend should refresh it. Emulator two-finger and IME support depend
-on host configuration. Purchase flows are not part of this checklist.
+on host configuration.
+
+Characters the device's text injection cannot type (for example, emoji and some CJK)
+may not arrive on Cloud Android devices yet. This requires a device-side fix and
+affects every client, including the web component. The emoji/CJK checklist row is
+a known limitation, rather than a passing delivery check.

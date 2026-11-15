@@ -5,7 +5,8 @@ Kotlin library for embedding Mobilerun device streaming and events.
 ## Quick start (from source)
 
 Clone this repository and open it in Android Studio with JDK 17 and Android SDK 36.
-Until publication, use the source modules: add `implementation(project(":stream-compose"))` to your Android app.
+Inside this checkout, add `implementation(project(":stream-compose"))` to an app module.
+External apps can add the published artifact after the first release; until then, use this source checkout.
 Obtain short-lived stream credentials from your integrator backend; never put an API key in the app.
 Create and close a session with your screen's lifetime, then embed the default UI:
 
@@ -152,10 +153,13 @@ Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shif
 Ctrl/Command+M presses Menu. Single graphemes, including emoji and combining sequences, inject their produced text without normalization.
 Keycode DOWNs track physical identity; only matched keyups send UP, using current modifiers. Text
 and completed paste/menu shortcuts never produce orphan releases.
-The IME uses a normal text keyboard so CJK layouts can offer conversion candidates, with the no-personalized-learning hint on Android 8+. Composition
+The IME requests per-character Latin input with the no-suggestions flag and the no-personalized-learning hint on Android 8+. CJK IMEs may still compose. Composition
 stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and tab become ENTER/TAB; other
-committed control characters are dropped. Committed IME runs containing non-ASCII characters use the existing clipboard/paste protocol so CJK and emoji reach Android editors; ASCII runs use text injection. The local input buffer does not mirror the remote editor,
+committed control characters are dropped. Printable IME runs use INJECT_TEXT for every client. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
+Characters the device's text injection cannot type (for example, emoji and some CJK)
+may not arrive on Cloud Android devices yet. This requires a device-side fix and
+affects every client, including the web component.
 
 The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
 own Back handler, for example with AndroidX Activity's `OnBackPressedDispatcher`:
@@ -317,7 +321,7 @@ local-renderer screenshots and logs. Runtime target selection belongs outside th
 
 
 The core uses the same protocol as [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react); input routing follows the shared conformance vectors v0.2.0 (React adoption pending). The protocol and recovery contract is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
-replay through the shared keyboard, IME, pointer, geometry and scroll logic. The Android IME fixture suite separately pins the four Unicode cases that use clipboard/paste instead of key-character text injection.
+replay through the shared keyboard, IME, pointer, geometry and scroll logic. All 21 shared IME vectors also replay unmodified through the Android input connection.
 
 `scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default
 UI. The credential-free `DefaultUiGalleryTest` separately captures

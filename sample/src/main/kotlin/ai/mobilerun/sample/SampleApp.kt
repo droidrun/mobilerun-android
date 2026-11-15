@@ -4,23 +4,50 @@
 package ai.mobilerun.sample
 
 import ai.mobilerun.stream.android.DeviceStreamSession
-import ai.mobilerun.stream.android.DeviceStreamView
-import ai.mobilerun.stream.compose.*
-import ai.mobilerun.stream.core.*
+import ai.mobilerun.stream.compose.DeviceStream
+import ai.mobilerun.stream.compose.StreamLabels
+import ai.mobilerun.stream.compose.StreamTheme
+import ai.mobilerun.stream.compose.StreamThemeTokens
+import ai.mobilerun.stream.compose.TaskApproval
+import ai.mobilerun.stream.core.PendingApproval
+import ai.mobilerun.stream.core.StreamCredentials
+import ai.mobilerun.stream.core.StreamStats
+import ai.mobilerun.stream.core.TaskApprovalController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,21 +66,23 @@ fun SampleApp(initial: StreamCredentials? = null, loadFailed: Boolean = false, o
     SampleTheme { labels -> SampleContent(initial, loadFailed, labels, onCredentialsChange) }
 }
 
+enum class SampleThemeMode(val label: String) { LIGHT("Light"), DARK("Dark"), BRAND("Brand") }
+
 @Composable
 fun SampleTheme(content: @Composable ColumnScope.(StreamLabels) -> Unit) {
-    var theme by remember { mutableStateOf("Light") }
+    var theme by remember { mutableStateOf(SampleThemeMode.LIGHT) }
     val tokens = when (theme) {
-        "Dark" -> StreamThemeTokens.dark()
-        "Brand" -> StreamThemeTokens.light().copy(primary = Color(0xFF2563EB), radius = 16.dp)
-        else -> StreamThemeTokens.light()
+        SampleThemeMode.DARK -> StreamThemeTokens.dark()
+        SampleThemeMode.BRAND -> StreamThemeTokens.light().copy(primary = Color(0xFF2563EB), radius = 16.dp)
+        SampleThemeMode.LIGHT -> StreamThemeTokens.light()
     }
-    val labels = if (theme == "Brand") StreamLabels(connecting = "Preparing", retry = "Try again",
+    val labels = if (theme == SampleThemeMode.BRAND) StreamLabels(connecting = "Preparing", retry = "Try again",
         back = "Go back", home = "Start", recent = "Apps") else StreamLabels()
     StreamTheme(tokens) {
         Column(Modifier.fillMaxSize().background(tokens.background).windowInsetsPadding(WindowInsets.systemBars)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                listOf("Light", "Dark", "Brand").forEach { name ->
-                    SampleButton(name, { theme = name })
+                SampleThemeMode.entries.forEach { mode ->
+                    SampleButton(mode.label, { theme = mode })
                 }
             }
             content(labels)
@@ -64,7 +93,6 @@ fun SampleTheme(content: @Composable ColumnScope.(StreamLabels) -> Unit) {
 @Composable
 private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: Boolean, labels: StreamLabels, onCredentialsChange: (StreamCredentials) -> Unit) {
     val context = LocalContext.current
-    val hostView = LocalView.current
     var url by remember { mutableStateOf(initial?.url ?: "") }
     var token by remember { mutableStateOf(initial?.token ?: "") }
     var target by remember { mutableStateOf(initial) }
@@ -102,7 +130,6 @@ private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: B
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 SampleButton("Credentials", { form = !form })
                 SampleButton("Reconnect", { generation++ })
-                SampleButton("Keyboard", { (hostView.rootView.findFocus() as? DeviceStreamView)?.showKeyboard() })
                 SampleButton(if (showStats) "Hide stats" else "Stats", { showStats = !showStats })
             }
             if (showStats) {
@@ -133,7 +160,7 @@ private fun StatsPanel(stats: StreamStats?) {
         "First frame ${stats?.timeToFirstFrameMs.display()} ms")
 }
 
-// Only this sample's local fake is used; no task endpoint or purchase is involved.
+// Only this sample's local fake is used; no task endpoint is called.
 @Composable
 fun DemoApproval(now: () -> Long = System::currentTimeMillis) {
     val scope = rememberCoroutineScope()

@@ -6,7 +6,13 @@ package ai.mobilerun.sample
 import ai.mobilerun.stream.compose.StreamTheme
 import ai.mobilerun.stream.compose.StreamNavigationBar
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import org.junit.Rule
 import org.junit.Test
@@ -23,10 +29,12 @@ class SampleUiTest {
     @Test fun themeButtonsApplyTokensAndCustomLabels() {
         var background = Color.Transparent
         var primary = Color.Transparent
+        var radius = 0.dp
         compose.setContent {
             SampleTheme { labels ->
                 background = StreamTheme.tokens.background
                 primary = StreamTheme.tokens.primary
+                radius = StreamTheme.tokens.radius
                 StreamNavigationBar({}, labels = labels)
             }
         }
@@ -36,7 +44,9 @@ class SampleUiTest {
         compose.runOnIdle {
             assertEquals(Color.White, background)
             assertEquals(Color(0xFF2563EB), primary)
+            assertEquals(16.dp, radius)
         }
+        compose.onNodeWithContentDescription("Go back").assertIsDisplayed()
         compose.onNodeWithContentDescription("Start").assertIsDisplayed()
         compose.onNodeWithContentDescription("Apps").assertIsDisplayed()
         compose.onNodeWithText("Light").performClick()
@@ -44,12 +54,11 @@ class SampleUiTest {
     }
 
     @Test fun localDemoCountsDownAndRefetchesAfterApproveAndDeny() {
-        compose.setContent { StreamTheme { DemoApproval() } }
+        val now = 1_700_000_000_000L
+        android.os.SystemClock.setCurrentTimeMillis(now)
+        compose.setContent { StreamTheme { DemoApproval(now = { now }) } }
         compose.onNodeWithText("Demo approval").performScrollTo().performClick()
-        compose.onNode(SemanticsMatcher("countdown is visible") { node ->
-            node.config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Text) { emptyList() }
-                .any { it.text.matches(Regex("[0-9]+s left")) }
-        }).assertIsDisplayed()
+        compose.onNodeWithText("30s left").assertIsDisplayed()
         compose.onNodeWithText("Approve").performScrollTo().performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Demo: approve · refetched (3)").fetchSemanticsNodes().size == 1
