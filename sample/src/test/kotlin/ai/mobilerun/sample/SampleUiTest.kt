@@ -54,9 +54,10 @@ class SampleUiTest {
     }
 
     @Test fun localDemoCountsDownAndRefetchesAfterApproveAndDeny() {
-        val now = 1_700_000_000_000L
-        android.os.SystemClock.setCurrentTimeMillis(now)
+        var now = 0L
         compose.setContent { StreamTheme { DemoApproval(now = { now }) } }
+        // Freeze the deadline clock after initial composition, immediately before the action.
+        compose.runOnIdle { now = System.currentTimeMillis() }
         compose.onNodeWithText("Demo approval").performScrollTo().performClick()
         compose.onNodeWithText("30s left").assertIsDisplayed()
         compose.onNodeWithText("Approve").performScrollTo().performClick()
