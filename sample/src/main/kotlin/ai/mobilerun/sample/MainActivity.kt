@@ -3,19 +3,29 @@
 
 package ai.mobilerun.sample
 
-import androidx.activity.ComponentActivity
+import android.app.Application
 import android.os.Bundle
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val file = File(filesDir, "stream-e2e.json")
-        val loaded = runCatching { if (file.exists()) parseCredentials(file.readText()) else null }
-        file.delete()
+        val state = ViewModelProvider(this)[SampleLaunchState::class.java]
         setContentView(ComposeView(this).apply {
-            setContent { SampleApp(loaded.getOrNull(), loaded.isFailure) }
+            setContent { SampleApp(state.credentials, state.loadFailed) { state.credentials = it } }
         })
     }
+}
+
+// Retain loaded credentials through activity recreation, without saving them to instance state.
+class SampleLaunchState(application: Application) : AndroidViewModel(application) {
+    private val file = File(application.filesDir, "stream-e2e.json")
+    private val loaded = runCatching { if (file.exists()) parseCredentials(file.readText()) else null }
+    var credentials = loaded.getOrNull()
+    val loadFailed = loaded.isFailure
+    init { file.delete() }
 }

@@ -35,8 +35,8 @@ import kotlin.time.Instant
 import java.util.Locale
 
 @Composable
-fun SampleApp(initial: StreamCredentials? = null, loadFailed: Boolean = false) {
-    SampleTheme { labels -> SampleContent(initial, loadFailed, labels) }
+fun SampleApp(initial: StreamCredentials? = null, loadFailed: Boolean = false, onCredentialsChange: (StreamCredentials) -> Unit = {}) {
+    SampleTheme { labels -> SampleContent(initial, loadFailed, labels, onCredentialsChange) }
 }
 
 @Composable
@@ -62,7 +62,7 @@ fun SampleTheme(content: @Composable ColumnScope.(StreamLabels) -> Unit) {
 }
 
 @Composable
-private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: Boolean, labels: StreamLabels) {
+private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: Boolean, labels: StreamLabels, onCredentialsChange: (StreamCredentials) -> Unit) {
     val context = LocalContext.current
     val hostView = LocalView.current
     var url by remember { mutableStateOf(initial?.url ?: "") }
@@ -81,7 +81,12 @@ private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: B
             Label(error)
             SampleButton("Connect", {
                 if (url.isBlank() || token.isBlank()) error = "Enter a stream URL and token"
-                else { target = StreamCredentials(url, token); generation++; form = false; error = "" }
+                else {
+                    val entered = StreamCredentials(url, token)
+                    target = entered
+                    onCredentialsChange(entered)
+                    generation++; form = false; error = ""
+                }
             })
         }
     }
