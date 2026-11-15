@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class SampleLaunchStateTest {
-    private val application = RuntimeEnvironment.getApplication<Application>()
+    private val application = RuntimeEnvironment.getApplication()
     private val file = File(application.filesDir, "stream-e2e.json")
 
     @Test fun launchReadsAndDeletesCredentialsFile() {
