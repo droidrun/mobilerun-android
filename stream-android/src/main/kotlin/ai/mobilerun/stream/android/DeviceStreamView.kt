@@ -231,8 +231,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val pointerId = id(event.actionIndex)
                 if (event.flags and MotionEvent.FLAG_CANCELED != 0) pointers.cancel(pointerId)
-                else pointers.up(pointerId, if (mouse && event.actionButton != 0 &&
-                    event.actionButton != MotionEvent.BUTTON_PRIMARY) 1 else 0)
+                else pointers.up(pointerId)
                 if (event.actionMasked == MotionEvent.ACTION_UP) {
                     parent?.requestDisallowInterceptTouchEvent(false)
                     performClick()

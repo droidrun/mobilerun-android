@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.StreamStats
 import ai.mobilerun.stream.core.PeerConfiguration
 import ai.mobilerun.stream.core.PeerConnectionState
 import ai.mobilerun.stream.core.PeerListener
@@ -12,11 +13,6 @@ import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
 import ai.mobilerun.stream.protocol.IceServer
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import org.webrtc.RTCStatsReport
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
@@ -44,7 +40,7 @@ internal class WebRtcPeerTransportFactory(
         configuration: PeerConfiguration,
         channels: List<DataChannelSpec>,
         listener: PeerListener,
-    ): PeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec)
+    ): WebRtcPeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec)
 }
 
 /** One libwebrtc peer connection: recvonly audio and video, the negotiated data channels. */
@@ -68,23 +64,15 @@ internal class WebRtcPeerTransport(
     @Volatile private var closed = false
     @Volatile private var videoTrack: VideoTrack? = null
     @Volatile private var audioTrack: AudioTrack? = null
-    private var statsJob: Job? = null
-    private val statsParser = StreamStatsParser()
-
-    /** Runs getStats and parses callbacks on the engine's serial, attempt-bound context. */
-    fun startStats(scope: CoroutineScope) {
-        if (statsJob?.isActive == true || closed) return
-        statsJob = scope.launch {
-            while (isActive && !closed) {
-                val report = statsReport()
-                if (!closed && connectionState == PeerConnectionState.Connected) {
-                    media.stats.value = statsParser.parse(report.statsMap.values.map {
-                        StatsRecord(it.id, it.type, it.timestampUs, it.members)
-                    }, media.firstFrameMs)
-                }
-                delay(1000)
-            }
-        }
+    /** Called only by the session sampler on its serial context. */
+    suspend fun sampleStats(parser: StreamStatsParser): StreamStats? {
+        if (closed) return null
+        val report = statsReport()
+        if (closed || connectionState != PeerConnectionState.Connected) return null
+        val types = setOf("inbound-rtp", "transport", "candidate-pair", "local-candidate", "remote-candidate", "codec")
+        return parser.parse(report.statsMap.values.filter { it.type in types }.map {
+            StatsRecord(it.id, it.type, it.timestampUs, it.members)
+        }, media.firstFrameMs)
     }
 
     /** Native report access for the sampler and instrumentation recording. */
@@ -92,12 +80,6 @@ internal class WebRtcPeerTransport(
         peerConnection.getStats { report ->
             if (continuation.isActive) continuation.resume(report)
         }
-    }
-
-    fun stopStats() {
-        statsJob?.cancel()
-        statsJob = null
-        media.stats.value = null
     }
 
     init {
@@ -199,7 +181,6 @@ internal class WebRtcPeerTransport(
     override fun close() {
         if (closed) return
         closed = true
-        stopStats()
         videoTrack?.let(media::detachVideo)
         audioTrack?.let(media::detachAudio)
         for (channel in channels.values) {

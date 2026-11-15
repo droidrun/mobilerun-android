@@ -45,7 +45,7 @@ internal class StreamInputConnection(
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
         if (!canSend() || beforeLength < 0 || afterLength < 0) return false
         if (buffer.isNotEmpty()) return super.deleteSurroundingText(beforeLength, afterLength)
-        ImeInput.delete(buffer.toString(), beforeLength, afterLength, send)
+        ImeInput.delete(beforeLength, afterLength, send)
         return true
     }
 

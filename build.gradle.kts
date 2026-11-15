@@ -28,6 +28,7 @@ subprojects {
 
             sourceSets.named("commonTest") {
                 kotlin.srcDir(conformanceDir.dir("testkit/common"))
+                kotlin.srcDir(conformanceDir.dir("testkit/shared"))
                 dependencies {
                     implementation(kotlin("test"))
                     implementation(libs.kotlinx.coroutines.test)

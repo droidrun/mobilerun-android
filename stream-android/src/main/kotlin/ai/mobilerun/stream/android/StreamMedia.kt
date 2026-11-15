@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.android
 
+
 import ai.mobilerun.stream.core.VideoSize
 import android.os.SystemClock
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,6 @@ internal class StreamMedia(initialMuted: Boolean) {
 
     val videoTrack: StateFlow<VideoTrack?> = track.asStateFlow()
     val videoSize: StateFlow<VideoSize?> = size.asStateFlow()
-    val stats = MutableStateFlow<StreamStats?>(null)
     @Volatile var firstFrameMs: Double? = null
         private set
     @Volatile private var attemptStartedNs = 0L
@@ -31,13 +31,12 @@ internal class StreamMedia(initialMuted: Boolean) {
     fun beginAttempt() {
         attemptStartedNs = SystemClock.elapsedRealtimeNanos()
         firstFrameMs = null
-        stats.value = null
     }
 
     @Volatile private var muted = initialMuted
     @Volatile private var audio: AudioTrack? = null
 
-    private var sizeSink: VideoSink? = null
+    @Volatile private var sizeSink: VideoSink? = null
 
     fun attachVideo(video: VideoTrack) {
         track.value?.let(::detachVideo)

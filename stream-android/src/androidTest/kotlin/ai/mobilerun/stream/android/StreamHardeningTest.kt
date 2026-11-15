@@ -9,6 +9,7 @@ import android.os.Debug
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import org.json.JSONObject
 import org.junit.Test
 import java.io.File
@@ -50,6 +51,7 @@ class StreamHardeningTest {
             device.signalling.open(credentials, listener)
         }
         val session = DeviceStreamSession(context, { device.credentials }, scope, StreamConfig(), factory)
+        val statsObserver = scope.launch { session.stats.collect {} }
         var host: InputTestActivity? = null
         var lifecycle: StreamLifecycle? = null
         val peersBefore = WebRtcRuntime.activePeers.get()
@@ -138,6 +140,7 @@ class StreamHardeningTest {
                 host?.stream?.detach()
                 host?.finish()
             }
+            statsObserver.cancel()
             session.close()
             scope.cancel()
             withTimeout(10_000) {

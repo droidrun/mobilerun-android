@@ -50,15 +50,15 @@ import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
 status = int(sys.argv[2])
 lines = ["# Stream benchmark", "",
-         "Method: renderer frame callback at quarter scale; time from tap DOWN to the first frame whose selected region changes mean luma by at least 4/255. Each sample resets to Home and taps an existing harmless app icon. Status/navigation bars are excluded. Measures the renderer callback, not physical display scanout.", "",
-         "| Run | First frame ms | FPS | kbit/s | RTT ms | ICE local/remote | Tap median ms | Tap p90 ms |",
-         "|---|---:|---:|---:|---:|---|---:|---:|"]
+         "Method: quarter-scale renderer callback; tap DOWN to maximum 4x4-tile mean absolute luma difference >=4/255 in a 64x64 upright-video-pixel region around the tap. Four stable frames precede input. App-launch transition is measured separately in the central picture (20-80% width, 20-60% height), away from the dock icon. Stimulus: launch a harmless app from Home. Excludes physical display scanout. Steady statistics use ten distinct flow emissions per connection.", "",
+         "| Run | First frame ms | FPS | kbit/s | RTT ms | ICE local/remote | Tap median ms | Tap p90 ms | App-launch median ms | App-launch p90 ms |",
+         "|---|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
 data = out / 'benchmark.json'
 def value(v):
     return 'n/a' if v is None else (f'{v:.2f}' if isinstance(v, (int, float)) else str(v))
 if data.exists():
     for row in json.loads(data.read_text()):
-        keys = ['run','firstFrameMs','fps','bitrateKbps','rttMs','candidateType','latencyMedianMs','latencyP90Ms']
+        keys = ['run','firstFrameMs','fps','bitrateKbps','rttMs','candidateType','latencyMedianMs','latencyP90Ms','appLaunchMedianMs','appLaunchP90Ms']
         lines.append('| ' + ' | '.join(value(row.get(k)) for k in keys) + ' |')
 if status:
     log = (out / 'benchmark-run.log').read_text(errors='replace')

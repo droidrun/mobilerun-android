@@ -5,7 +5,6 @@ package ai.mobilerun.stream.core
 
 import ai.mobilerun.stream.protocol.AndroidKeys
 import ai.mobilerun.stream.protocol.ControlMessages
-import ai.mobilerun.stream.protocol.KeyboardCodes
 
 /** Finalized IME text and marked-composition deletion, shared by native input and fixture replay. */
 @InternalStreamApi
@@ -24,7 +23,7 @@ public object ImeInput {
                 '\r', '\n', '\t' -> {
                     flush()
                     if (character == '\r' && index < text.length && text[index] == '\n') index++
-                    KeyInput.press(if (character == '\t') KeyboardCodes.keycodeByCode.getValue("Tab")
+                    KeyInput.press(if (character == '\t') AndroidKeys.KEYCODE_TAB
                         else AndroidKeys.ENTER, send)
                 }
                 else -> if (!character.isISOControl()) chunk.append(character)
@@ -33,9 +32,9 @@ public object ImeInput {
         flush()
     }
 
-    /** Marked text is local; an empty marked buffer permits bounded remote deletion. */
-    public fun delete(composition: String, before: Int, after: Int, send: (ByteArray) -> Unit) {
-        if (composition.isNotEmpty() || before < 0 || after < 0) return
+    /** Sends bounded remote deletion after the native composition buffer has been handled locally. */
+    public fun delete(before: Int, after: Int, send: (ByteArray) -> Unit) {
+        if (before < 0 || after < 0) return
         repeat(before.coerceAtMost(64)) { KeyInput.press(AndroidKeys.DEL, send) }
         repeat(after.coerceAtMost(64)) { KeyInput.press(AndroidKeys.FORWARD_DEL, send) }
     }

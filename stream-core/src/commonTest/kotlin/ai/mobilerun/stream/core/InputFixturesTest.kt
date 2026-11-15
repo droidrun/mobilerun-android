@@ -10,6 +10,7 @@ import kotlinx.serialization.json.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 /** Every vector is replayed through the same pure routing used by the Android view and IME. */
@@ -44,9 +45,18 @@ class InputFixturesTest {
         val input = PointerInput(send)
         val width = case.int("video_width")
         val height = case.int("video_height")
-        val geometry = InputGeometry.fit(width, height, VideoSize(width, height, 0))
+        val fitted = InputGeometry.fit(width, height, VideoSize(width, height, 0))
+        if (width == 0 && height == 0) {
+            // The pinned "video not ready" case deliberately has no input geometry.
+            assertNull(fitted)
+            assertTrue(case.getValue("expect").jsonArray.isEmpty())
+            case.getValue("events").jsonArray.forEach {
+                assertTrue(it.jsonObject.text("type") in setOf("down", "move", "up", "cancel"))
+            }
+            return@messages
+        }
+        val geometry = assertNotNull(fitted, "ready-video pointer vectors require geometry")
         for (event in case.getValue("events").jsonArray.map { it.jsonObject }) {
-            if (geometry == null) continue
             val mouse = event.flag("mouse")
             val id = if (mouse) PointerInput.MOUSE_ID else event.int("id")
             when (event.text("type")) {

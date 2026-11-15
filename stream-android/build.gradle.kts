@@ -8,6 +8,9 @@ android {
     compileSdk = 36
 
     testOptions { unitTests.isIncludeAndroidResources = true }
+    sourceSets.getByName("test").kotlin.apply {
+        srcDir(rootProject.file("conformance/testkit/shared"))
+    }
 
     defaultConfig {
         minSdk = 24

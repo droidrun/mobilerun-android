@@ -1,7 +1,11 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package ai.mobilerun.stream.android
+
+import ai.mobilerun.stream.core.StreamStats
 
 import ai.mobilerun.stream.core.InternalStreamApi
 import ai.mobilerun.stream.core.PeerTransportFactory
@@ -14,8 +18,13 @@ import ai.mobilerun.stream.core.VideoSize
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
@@ -24,7 +33,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * A live stream session to one Mobilerun cloud device: signalling WebSocket plus WebRTC, with the
- * same protocol and recovery behaviour as `@mobilerun/react`.
+ * same protocol as `@mobilerun/react`; input routing follows conformance v0.2.0 (React adoption pending).
  *
  * The session connects on [start], reports its progress in [status], exposes the received video
  * through the Android view. Input mapping and channel sends are handled by the view. When the
@@ -71,20 +80,31 @@ public class DeviceStreamSession internal constructor(
     )
 
     private val appContext = context.applicationContext
+    private val sessionJob = SupervisorJob(scope.coroutineContext[Job])
+    private val serial = (scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher
+        ?: Dispatchers.Default).limitedParallelism(1)
+    private val worker = CoroutineScope(scope.coroutineContext + serial + sessionJob)
+    private val visible = MutableStateFlow(true)
+    private var activePeer: WebRtcPeerTransport? = null
     internal val media = StreamMedia(config.muted)
+    private val nativePeers = WebRtcPeerTransportFactory(
+        { WebRtcRuntime.factory(appContext) }, media, config.videoCodec)
     private val engine = StreamSessionEngine(
-        scope = scope,
+        scope = worker,
         credentials = credentials,
         signalling = { target, listener ->
             media.beginAttempt()
             signalling.open(target, listener)
         },
-        peers = peers ?: WebRtcPeerTransportFactory(
-            { WebRtcRuntime.factory(appContext) }, media, config.videoCodec),
+        peers = peers ?: PeerTransportFactory { configuration, channels, listener ->
+            nativePeers.create(configuration, channels, listener).also { activePeer = it }
+        },
         logger = config.logger,
-        onPeerConnected = { peer, attemptScope -> (peer as? WebRtcPeerTransport)?.startStats(attemptScope) },
-        onPeerDisconnected = { peer -> (peer as? WebRtcPeerTransport)?.stopStats() },
     )
+
+    private val sampler = StreamStatsSampler(worker, engine.status, visible) { parser ->
+        activePeer?.sampleStats(parser)
+    }
 
     /** The connection status. */
     public val status: StateFlow<StreamStatus> get() = engine.status
@@ -92,8 +112,8 @@ public class DeviceStreamSession internal constructor(
     /** Size and rotation of the received video; `null` until the first frame and while reconnecting. */
     public val videoSize: StateFlow<VideoSize?> get() = media.videoSize
 
-    /** Inbound-video statistics sampled each second while connected; null otherwise. */
-    public val stats: StateFlow<StreamStats?> = media.stats.asStateFlow()
+    /** One-second inbound-video samples while connected, visible and collected; null otherwise. */
+    public val stats: StateFlow<StreamStats?> = sampler.stats
 
     /**
      * The received video track for a renderer; `null` while there is none. It changes with every
@@ -115,14 +135,19 @@ public class DeviceStreamSession internal constructor(
     public fun retry(): Unit = engine.retry()
 
     /** Pauses keep-alive messages while the host is hidden; does not end the session. */
-    public fun setHostVisible(visible: Boolean): Unit = engine.setHostVisible(visible)
+    public fun setHostVisible(visible: Boolean) {
+        this.visible.value = visible
+        engine.setHostVisible(visible)
+    }
 
     /** Retries a pending recovery immediately, or revives an unavailable session. Never starts a closed session. */
     public fun handleWake(): Unit = engine.handleWake()
 
     /** Releases the connection, channels and video. A closed session cannot be restarted. */
     public fun close() {
+        sampler.close()
         engine.close()
+        sessionJob.cancel()
     }
 
     /** Silences or enables the device audio. */

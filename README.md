@@ -54,12 +54,12 @@ The credentials provider is called at start, once per reconnect cycle and when t
 
 ## Stream statistics and benchmark
 
-`session.stats` is read-only and `null` while disconnected or after close. Collect it like the
-status flow. Every connected second it reports inbound video fps, decoded dimensions, codec MIME
+`session.stats` exposes `ai.mobilerun.stream.core.StreamStats`. It is read-only and `null` while disconnected or after close. Collect it like the
+status flow. While the host is visible and at least one collector observes it, every connected second it reports inbound video fps, decoded dimensions, codec MIME
 type, payload bitrate in kbit/s, selected-pair RTT in ms, jitter-buffer delay per emitted frame,
 packet loss, dropped frames, freezes, decode time per frame, local/remote ICE candidate types, and
 time from the connection attempt to its first decoded frame. Missing platform fields remain null.
-Bitrate and per-frame durations need two reports; each new attempt resets the counter baseline.
+Bitrate and per-frame durations need two reports; each new attempt or sampling resume resets the counter baseline. Hidden, unobserved and non-connected sessions expose null and do not sample.
 RTT uses the transport's selected candidate pair, rather than an arbitrary nominated pair.
 
 The instrumentation-only benchmark opens five connections and takes ten input-latency samples per
@@ -68,18 +68,21 @@ and an output directory outside the repository:
 
 ```sh
 STREAM_E2E_CREDENTIALS="$RUNTIME_CREDENTIALS" STREAM_BENCHMARK_OUT="$BENCHMARK_OUTPUT" \
-  TAP_X=200 TAP_Y=600 tool/benchmark
+  TAP_X=200 TAP_Y=600 scripts/benchmark.sh
 ```
 
 `TAP_X/Y` are upright video pixels selecting an existing harmless launcher app icon. Each sample
-returns Home, waits for a stable region, taps that icon and records the first changed rendered
-frame. Choose `BENCHMARK_REGION=left,top,width,height` in normalized picture coordinates to exclude
-animated widgets and system bars (default `0.15,0.15,0.7,0.7`). A quarter-scale renderer callback
-detects a mean-luma change of at least 4/255. This measures tap DOWN to rendered-frame callback;
-it excludes physical display scanout. Failed stability/change checks fail the benchmark instead of
-inventing a latency. `BENCHMARK_RUNS` and `BENCHMARK_SAMPLES` override the defaults. The output contains
-raw samples in `benchmark.json` and a `benchmark-results.md` table (median and nearest-rank p90).
-Credentials are copied only to the test app's private storage at run time and removed afterward.
+returns Home, waits for four stable frames, then taps it. A quarter-scale renderer callback compares
+4×4 pixel tiles with the baseline. The tap-response region is 64×64 upright-video pixels centered on
+the tap; the first tile whose mean absolute luma difference reaches 4/255 ends input-to-pixel timing.
+The separate app-launch metric observes the central picture (20–80% width, 20–60% height), away from
+the dock icon. These are an app-launch stimulus's local response and central transition respectively,
+not physical display scanout or an isolated network transit measurement. Ten steady-state stats
+samples per connection are distinct flow emissions. Failed stability/change checks fail the benchmark.
+`BENCHMARK_RUNS` and `BENCHMARK_SAMPLES` override the five-connection/ten-input defaults. Results include
+both raw sample sets and separately labelled median/p90 columns. Credentials are copied only to the
+test app's private storage at runtime and removed afterward. Sanitized native reports are a separate,
+opt-in `NativeStatsCaptureTest` using the same instrumentation runner.
 
 The separate `StreamHardeningTest` uses the same runner and credentials. It exercises host visibility,
 network loss/restoration, a ten-minute soak (PSS growth bounded by the larger of 32 MiB or 25% of the
@@ -123,7 +126,7 @@ DeviceStream(session = session, modifier = Modifier.fillMaxSize(), hasControl = 
 check; the server decides access. Touch uses stable slots for up to ten fingers, coalesces movement
 per frame and releases at the last position inside the video. Mouse drags use pointer -1; hover
 uses only the hover channel. Wheel axes use Android's tick units, without the browser pixel scaling.
-Hardware single-character keys inject text (including control characters, matching React); navigation, modifier and Ctrl/Command combinations inject
+Hardware printable single-grapheme keys inject text; Enter, NumpadEnter, Tab, navigation, modifier and Ctrl/Command combinations inject
 Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shift for letters. Ctrl/Command+V pastes the local primary clipboard;
 Ctrl/Command+M presses Menu. Single graphemes, including emoji and combining sequences, inject their produced text without normalization.
 Keycode DOWNs track physical identity; only matched keyups send UP, using current modifiers. Text
@@ -269,7 +272,7 @@ session.start()
 ```
 
 The callback returns `StreamCredentials?`; null means not ready. The engine polls every 3 seconds,
-including after fetch failures, and refetches on recovery/heal. Each provider call is bounded by the reconnect connect timeout (45 seconds); a hung call cannot
+including after fetch failures, and refetches on recovery/heal. Each provider call is bounded by the reconnect connect timeout (45 seconds); a hung suspending call cannot
 block wake/retry work, and a timed-out initial call is polled again. Cancellation stops polling. No API
 key belongs in the app: stream tokens are short-lived backend-issued values.
 
@@ -292,7 +295,7 @@ content or text-field crops that exclude the status bar. `STREAM_E2E_OUT` receiv
 local-renderer screenshots and logs. Runtime target selection belongs outside the test.
 
 
-The core behaves exactly like the [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react) stream package. That is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
+The core uses the same protocol as [`@mobilerun/react`](https://github.com/droidrun/mobilerun-react); input routing follows the shared conformance vectors v0.2.0 (React adoption pending). The protocol and recovery contract is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
 replay through the same pure keyboard, IME, pointer, geometry and scroll logic used by Android.
 
 `scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default

@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.StreamStats
+
 /** Primitive projection of RTCStats, also used by recorded-report tests. No addresses are retained. */
 internal class StatsRecord(val id: String, val type: String, val timestampUs: Double, val members: Map<String, Any>) {
     fun number(key: String): Double? = (members[key] as? Number)?.toDouble()?.takeIf { it.isFinite() }
@@ -53,7 +55,6 @@ internal class StreamStatsParser {
             decodeTimeMs = perFrame("totalDecodeTime", "framesDecoded"),
             localCandidateType = local,
             remoteCandidateType = remote,
-            candidateType = if (local != null && remote != null) "$local/$remote" else null,
             timeToFirstFrameMs = firstFrameMs,
         )
     }

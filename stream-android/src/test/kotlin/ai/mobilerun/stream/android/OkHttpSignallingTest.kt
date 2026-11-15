@@ -13,7 +13,6 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.CountDownLatch
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -147,23 +146,33 @@ class OkHttpSignallingTest {
     }
 
     @Test
-    fun closeReleasesSocketWithoutWaitingForServerAck() {
-        val terminated = CountDownLatch(1)
+    fun closeSendsNormalFrameAndReleasesListenerWithoutServerAck() {
+        val closing = LinkedBlockingQueue<Int>()
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket = webSocket }
-            // Deliberately leave a graceful CLOSE unanswered.
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = Unit
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                terminated.countDown()
-            }
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                terminated.countDown()
-            }
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { closing += code }
         }))
-        val transport = open(credentials())
-        assertEquals("open", next(events))
-        transport.close()
-        assertTrue(terminated.await(2, TimeUnit.SECONDS), "close must release an unacknowledged socket promptly")
+        val collected = java.lang.ref.ReferenceQueue<SignallingListener>()
+        fun openListener(): java.lang.ref.WeakReference<SignallingListener> {
+            val target = object : SignallingListener {
+                override fun onOpen() { events += "open" }
+                override fun onMessage(text: String) = Unit
+                override fun onClosed() = Unit
+                override fun onFailure(httpStatus: Int?) = Unit
+            }
+            val reference = java.lang.ref.WeakReference<SignallingListener>(target, collected)
+            val transport = factory.open(credentials(), target).also { transports += it }
+            assertEquals("open", next(events))
+            transport.close()
+            return reference
+        }
+        val reference = openListener()
+        assertEquals(1000, closing.poll(2, TimeUnit.SECONDS))
+        repeat(20) {
+            System.gc()
+            if (collected.remove(100) != null) return@repeat
+        }
+        assertNull(reference.get(), "unacknowledged close must not retain the listener/session")
     }
 
     @Test

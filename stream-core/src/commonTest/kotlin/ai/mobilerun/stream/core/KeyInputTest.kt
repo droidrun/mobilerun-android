@@ -75,10 +75,26 @@ class KeyInputTest {
     }
 
     @Test
-    fun singleCharacterHardwareTextMatchesReactEvenForControlCharacters() {
+    fun hardwareControlCharactersUsePhysicalKeycodeInsteadOfText() {
         for (text in listOf("\n", "\t", "\u0000", "\u007f")) {
             val messages = route("KeyA", text, 0)
-            assertContentEquals(ControlMessages.text(text), messages.single())
+            messages.forEachIndexed { action, bytes ->
+                assertContentEquals(ControlMessages.keycode(action, 29), bytes)
+            }
+            assertEquals(2, messages.size)
+        }
+    }
+
+    @Test fun enterNumpadEnterAndShiftTabIgnoreProducedControlText() {
+        for ((code, text, meta) in listOf(Triple(66, "\n", 0), Triple(160, "\n", 0),
+            Triple(61, "\t", AndroidKeys.META_SHIFT_ON))) {
+            val messages = mutableListOf<ByteArray>()
+            val input = KeyInput()
+            for (down in listOf(true, false)) input.route(code, text, down, meta, { null }) { messages += it }
+            assertEquals(2, messages.size)
+            messages.forEachIndexed { action, bytes ->
+                assertContentEquals(ControlMessages.keycode(action, code, metaState = meta), bytes)
+            }
         }
     }
 

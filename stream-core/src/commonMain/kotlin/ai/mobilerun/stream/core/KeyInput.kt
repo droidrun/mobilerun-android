@@ -7,21 +7,10 @@ import ai.mobilerun.stream.protocol.AndroidKeys
 import ai.mobilerun.stream.protocol.ControlMessages
 import ai.mobilerun.stream.protocol.KeyboardCodes
 
-/** React's keyboard routing, with the platform providing its Android keycode and printable text. */
+/** Conformance keyboard routing, with the platform providing its Android keycode and printable text. */
 @InternalStreamApi
 public class KeyInput {
-    private val controlCodes = listOf(
-        "Backspace", "Delete", "Enter", "NumpadEnter", "Tab", "Escape", "Home", "End",
-        "PageUp", "PageDown", "Insert",
-        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "ControlLeft",
-        "ControlRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight",
-    ).toSet()
     private val pressed = mutableMapOf<String, Int>()
-    // The JVM/Android regex engine implements extended grapheme clusters (UAX #29).
-    private val grapheme = Regex("\\X")
-    private val letterKeycodes = KeyboardCodes.keycodeByCode.filterKeys {
-        it.length == 4 && it >= "KeyA" && it <= "KeyZ"
-    }.values.toSet()
 
     /** Returns false for keys with no remote meaning. Clipboard is read only for the paste shortcut. */
     public fun route(
@@ -33,8 +22,10 @@ public class KeyInput {
         capsLock: Boolean = false,
         send: (ByteArray) -> Unit,
     ): Boolean {
-        val code = KeyboardCodes.keycodeByCode.entries.firstOrNull { it.value == keycode }?.key ?: return false
-        return route(code, text, down, metaState, clipboard, capsLock, send)
+        val code = codeByKeycode[keycode] ?: return false
+        // Native produced controls are not printable text. Abstract vectors retain their key semantics.
+        return route(code, text?.takeUnless { value -> value.any { it.isISOControl() } },
+            down, metaState, clipboard, capsLock, send)
     }
 
     /** Routes produced text and physical identity separately, retaining balanced keycode releases. */
@@ -64,15 +55,9 @@ public class KeyInput {
                     send(ControlMessages.setClipboard(it, paste = true))
                 }
             shortcut && key.lowercase() == "m" -> press(AndroidKeys.MENU, send)
-            shortcut || key in controlCodes || key.startsWith("Arrow") ||
-                key.startsWith("Shift") || key.startsWith("Control") || key.startsWith("Alt") ||
-                key.startsWith("Meta") || key.startsWith("F") && key.length <= 3 -> {
-                if (keycode == null) return false
-                pressed[code] = keycode
-                send(ControlMessages.keycode(AndroidKeys.ACTION_DOWN, keycode, metaState = meta))
-            }
-            key.length == 1 || key.isNotEmpty() && key.none { it.isISOControl() } && grapheme.matches(key) ->
-                send(ControlMessages.text(key))
+            !shortcut && code !in controlCodes && !(key.startsWith("F") && key.length <= 3) &&
+                key.isNotEmpty() &&
+                (key.length == 1 || key.none { it.isISOControl() } && grapheme.matches(key)) -> send(ControlMessages.text(key))
             else -> {
                 if (keycode == null) return false
                 pressed[code] = keycode
@@ -87,6 +72,21 @@ public class KeyInput {
 
     @InternalStreamApi
     public companion object {
+        private val controlCodes = listOf(
+            "Backspace", "Delete", "Enter", "NumpadEnter", "Tab", "Escape", "Home", "End",
+            "PageUp", "PageDown", "Insert",
+            "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "ControlLeft",
+            "ControlRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight",
+        ).toSet()
+        // The JVM/Android regex engine implements extended grapheme clusters (UAX #29).
+        private val grapheme = Regex("\\X")
+        private val letterKeycodes = KeyboardCodes.keycodeByCode.filterKeys {
+            it.length == 4 && it >= "KeyA" && it <= "KeyZ"
+        }.values.toSet()
+
+        private val codeByKeycode = KeyboardCodes.keycodeByCode.entries
+            .associate { (code, keycode) -> keycode to code }
+
         /** A complete press, used for explicit system keys and IME editing actions. */
         public fun press(keycode: Int, send: (ByteArray) -> Unit) {
             send(ControlMessages.keycode(AndroidKeys.ACTION_DOWN, keycode))

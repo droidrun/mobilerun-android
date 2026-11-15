@@ -52,24 +52,6 @@ public final class ai/mobilerun/stream/android/StreamLifecycle : java/lang/AutoC
 	public fun close ()V
 }
 
-public final class ai/mobilerun/stream/android/StreamStats {
-	public final fun getBitrateKbps ()Ljava/lang/Double;
-	public final fun getCandidateType ()Ljava/lang/String;
-	public final fun getCodec ()Ljava/lang/String;
-	public final fun getDecodeTimeMs ()Ljava/lang/Double;
-	public final fun getFps ()Ljava/lang/Double;
-	public final fun getFramesDropped ()Ljava/lang/Long;
-	public final fun getFreezeCount ()Ljava/lang/Long;
-	public final fun getHeight ()Ljava/lang/Integer;
-	public final fun getJitterBufferDelayMs ()Ljava/lang/Double;
-	public final fun getLocalCandidateType ()Ljava/lang/String;
-	public final fun getPacketsLost ()Ljava/lang/Long;
-	public final fun getRemoteCandidateType ()Ljava/lang/String;
-	public final fun getRttMs ()Ljava/lang/Double;
-	public final fun getTimeToFirstFrameMs ()Ljava/lang/Double;
-	public final fun getWidth ()Ljava/lang/Integer;
-}
-
 public final class ai/mobilerun/stream/android/SystemKey : java/lang/Enum {
 	public static final field BACK Lai/mobilerun/stream/android/SystemKey;
 	public static final field HOME Lai/mobilerun/stream/android/SystemKey;

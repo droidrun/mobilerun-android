@@ -50,7 +50,6 @@ extra=()
 [ -n "${OPEN_URL:-}" ] && extra+=(-e openUrl "$OPEN_URL")
 [ -n "${BENCHMARK_RUNS:-}" ] && extra+=(-e benchmarkRuns "$BENCHMARK_RUNS")
 [ -n "${BENCHMARK_SAMPLES:-}" ] && extra+=(-e benchmarkSamples "$BENCHMARK_SAMPLES")
-[ -n "${BENCHMARK_REGION:-}" ] && extra+=(-e benchmarkRegion "$BENCHMARK_REGION")
 
 adb logcat -c
 status=0

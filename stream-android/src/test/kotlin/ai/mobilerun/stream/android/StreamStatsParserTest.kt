@@ -34,7 +34,8 @@ class StreamStatsParserTest {
         assertEquals(1080, sample.height)
         assertEquals("video/H265", sample.codec)
         assertEquals(19.0, sample.rttMs)
-        assertEquals("relay/prflx", sample.candidateType)
+        assertEquals("relay", sample.localCandidateType)
+        assertEquals("prflx", sample.remoteCandidateType)
         assertEquals(52_704.0 / 1016.954, requireNotNull(sample.bitrateKbps), 1e-6)
         assertEquals(9.503 / 61, requireNotNull(sample.jitterBufferDelayMs), 1e-6)
         assertEquals(262.0 / 60, requireNotNull(sample.decodeTimeMs), 1e-6)
@@ -64,7 +65,6 @@ class StreamStatsParserTest {
         assertEquals(1, sample.freezeCount)
         assertEquals("relay", sample.localCandidateType)
         assertEquals("srflx", sample.remoteCandidateType)
-        assertEquals("relay/srflx", sample.candidateType)
         assertEquals(425.0, sample.timeToFirstFrameMs)
     }
 
@@ -75,7 +75,8 @@ class StreamStatsParserTest {
         assertNull(empty.fps)
         assertNull(empty.bitrateKbps)
         assertNull(empty.rttMs)
-        assertNull(empty.candidateType)
+        assertNull(empty.localCandidateType)
+        assertNull(empty.remoteCandidateType)
         assertNull(empty.freezeCount)
         assertNull(parser.parse(reports[1], null).bitrateKbps)
     }

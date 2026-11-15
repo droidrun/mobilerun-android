@@ -1,7 +1,7 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
-package ai.mobilerun.stream.android
+package ai.mobilerun.stream.core
 
 /**
  * A one-second inbound-video sample. Missing WebRTC fields are `null`, never synthesized as zero.
@@ -10,7 +10,7 @@ package ai.mobilerun.stream.android
  *
  * This read-only value is created by the SDK, so fields can be added without changing callers.
  */
-public class StreamStats internal constructor(
+public class StreamStats @InternalStreamApi public constructor(
     /** Decoded frames per second (WebRTC's instantaneous value, or a counter delta). */
     public val fps: Double?,
     /** Decoded video width, in pixels. */
@@ -37,8 +37,13 @@ public class StreamStats internal constructor(
     public val localCandidateType: String?,
     /** Selected remote candidate, with the same vocabulary as [localCandidateType]. */
     public val remoteCandidateType: String?,
-    /** Selected candidate types as `local/remote`; null unless both are reported. */
-    public val candidateType: String?,
     /** Time from this connection attempt's creation to its first decoded video frame. */
     public val timeToFirstFrameMs: Double?,
-)
+) {
+    override fun toString(): String =
+        "StreamStats(fps=$fps, size=${width}x$height, codec=$codec, bitrateKbps=$bitrateKbps, " +
+            "rttMs=$rttMs, jitterBufferDelayMs=$jitterBufferDelayMs, packetsLost=$packetsLost, " +
+            "framesDropped=$framesDropped, freezeCount=$freezeCount, decodeTimeMs=$decodeTimeMs, " +
+            "localCandidateType=$localCandidateType, remoteCandidateType=$remoteCandidateType, " +
+            "timeToFirstFrameMs=$timeToFirstFrameMs)"
+}
