@@ -28,6 +28,7 @@ android {
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":stream-compose"))
+    implementation("androidx.activity:activity:1.12.4")
     implementation(libs.kotlinx.serialization.json)
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.kotlin.test.junit)

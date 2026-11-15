@@ -51,11 +51,17 @@ class SampleUiTest {
                 .any { it.text.matches(Regex("[0-9]+s left")) }
         }).assertIsDisplayed()
         compose.onNodeWithText("Approve").performScrollTo().performClick()
-        compose.onNodeWithText("Demo: approve · refetched (3)").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Demo: approve · refetched (3)").fetchSemanticsNodes().size == 1
+        }
+        compose.onNodeWithText("Demo: approve · refetched (3)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Approve").assertDoesNotExist()
         compose.onNodeWithText("Demo approval").performScrollTo().performClick()
         compose.onNodeWithText("Deny").performScrollTo().performClick()
-        compose.onNodeWithText("Demo: deny · refetched (5)").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Demo: deny · refetched (5)").fetchSemanticsNodes().size == 1
+        }
+        compose.onNodeWithText("Demo: deny · refetched (5)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Deny").assertDoesNotExist()
     }
 }

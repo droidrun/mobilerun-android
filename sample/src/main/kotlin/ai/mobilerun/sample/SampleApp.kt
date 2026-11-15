@@ -4,6 +4,7 @@
 package ai.mobilerun.sample
 
 import ai.mobilerun.stream.android.DeviceStreamSession
+import ai.mobilerun.stream.android.DeviceStreamView
 import ai.mobilerun.stream.compose.*
 import ai.mobilerun.stream.core.*
 import androidx.compose.foundation.background
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -62,6 +64,7 @@ fun SampleTheme(content: @Composable ColumnScope.(StreamLabels) -> Unit) {
 @Composable
 private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: Boolean, labels: StreamLabels) {
     val context = LocalContext.current
+    val hostView = LocalView.current
     var url by remember { mutableStateOf(initial?.url ?: "") }
     var token by remember { mutableStateOf(initial?.token ?: "") }
     var target by remember { mutableStateOf(initial) }
@@ -94,6 +97,7 @@ private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: B
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 SampleButton("Credentials", { form = !form })
                 SampleButton("Reconnect", { generation++ })
+                SampleButton("Keyboard", { (hostView.rootView.findFocus() as? DeviceStreamView)?.showKeyboard() })
                 SampleButton(if (showStats) "Hide stats" else "Stats", { showStats = !showStats })
             }
             if (showStats) {

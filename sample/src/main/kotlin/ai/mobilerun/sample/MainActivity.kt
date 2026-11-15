@@ -3,12 +3,12 @@
 
 package ai.mobilerun.sample
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.os.Bundle
 import androidx.compose.ui.platform.ComposeView
 import java.io.File
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val file = File(filesDir, "stream-e2e.json")

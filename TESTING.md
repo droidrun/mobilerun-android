@@ -49,7 +49,7 @@ the expected result. Remote state changes persist on that device.
 | Tap | The tapped remote control responds, including near the video's edges. |
 | Swipe | A scrollable remote page scrolls in the drag direction. |
 | Two-finger gesture | A zoomable page zooms; Android Emulator supports pinch with Ctrl (Command on macOS) or its multitouch controls. |
-| Type emoji and CJK | Focus a remote field, use its local IME, and enter `Hello 👋 中文`; committed text appears remotely. Install a suitable IME if needed. |
+| Type emoji and CJK | Focus a remote field, tap Keyboard to open the local IME, and enter `Hello 👋 中文`; committed text appears remotely. Install a suitable IME if needed. |
 | Back / Home / Recent | Each navigation button performs the corresponding remote Android action. |
 | Rotate | Rotate the emulator using its toolbar; video remains fitted and touch mapping stays correct. Rotate the remote device too if its app supports it. |
 | Background / foreground | Press the emulator's Home, then reopen Stream sample; the stream resumes or recovers. |

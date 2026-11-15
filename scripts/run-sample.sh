@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 creds="${1:?usage: scripts/run-sample.sh CREDENTIALS_JSON}"
 [ -f "$creds" ] || { echo "Credentials file not found" >&2; exit 2; }
+creds="$(cd "$(dirname "$creds")" && pwd)/$(basename "$creds")"
 # Keep the host's build/emulator lock for the entire interactive session.
 if [ "${SAMPLE_HEAVY_LOCKED:-}" != 1 ] && [ -x "$HOME/.local/bin/mr-heavy" ]; then
   exec "$HOME/.local/bin/mr-heavy" env SAMPLE_HEAVY_LOCKED=1 "$0" "$creds"
