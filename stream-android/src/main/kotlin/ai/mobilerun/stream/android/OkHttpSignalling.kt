@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** The WebSocket URL with the token as the `token` query parameter (replacing an existing one). */
 internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
@@ -40,12 +41,12 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
     @Volatile lateinit var socket: WebSocket
 
     @Volatile private var listener: SignallingListener? = listener
-    @Volatile private var finished = false
+    private val finished = AtomicBoolean(false)
 
-    override fun send(text: String): Boolean = !finished && socket.send(text)
+    override fun send(text: String): Boolean = !finished.get() && socket.send(text)
 
     override fun close() {
-        finished = true
+        finished.set(true)
         // Preserve the protocol CLOSE frame without retaining the session during the handshake.
         listener = null
         socket.close(1000, null)
@@ -53,11 +54,11 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
         socket = webSocket
-        if (!finished) listener?.onOpen()
+        if (!finished.get()) listener?.onOpen()
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
-        if (!finished) listener?.onMessage(text)
+        if (!finished.get()) listener?.onMessage(text)
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -71,8 +72,7 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
         end { it.onFailure(response?.code) }
 
     private fun end(report: (SignallingListener) -> Unit) {
-        if (finished) return
-        finished = true
+        if (!finished.compareAndSet(false, true)) return
         val target = listener
         listener = null
         target?.let(report)

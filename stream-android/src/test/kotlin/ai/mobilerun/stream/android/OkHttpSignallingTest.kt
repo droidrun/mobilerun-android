@@ -18,6 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -114,10 +115,11 @@ class OkHttpSignallingTest {
 
     @Test
     fun aClosingServerIsReportedOnceAndSendsStop() {
-        upgrade()
+        val opened = LinkedBlockingQueue<WebSocket>()
+        upgrade { opened += it }
         val transport = open(credentials())
         assertEquals("open", next(events))
-        serverSocket!!.close(1001, "going away")
+        assertNotNull(opened.poll(5, TimeUnit.SECONDS), "server socket did not open").close(1001, "going away")
         assertEquals("closed", next(events))
         assertFalse(transport.send("x"))
         assertNull(events.poll(300, TimeUnit.MILLISECONDS))
