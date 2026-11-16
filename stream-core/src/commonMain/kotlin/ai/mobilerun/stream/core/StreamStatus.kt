@@ -22,7 +22,7 @@ public sealed interface StreamStatus {
      * @property attempt 1-based number of the upcoming (or in-flight) reconnect attempt; 0 right after
      *   `retry()` or `handleWake()` started a fresh cycle.
      */
-    public class Reconnecting(public val attempt: Int) : StreamStatus {
+    public class Reconnecting internal constructor(public val attempt: Int) : StreamStatus {
         override fun equals(other: Any?): Boolean = other is Reconnecting && other.attempt == attempt
 
         override fun hashCode(): Int = attempt

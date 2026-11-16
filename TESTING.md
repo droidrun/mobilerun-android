@@ -73,8 +73,7 @@ The library suites cover streaming and input; see README for instrumented checks
 
 ## Known limitations
 
-Publishing has not happened;
-use the source checkout. The sample credentials provider reuses the entered token;
+Publishing has not happened; use the source checkout. The sample credentials provider reuses the entered token;
 a production backend should refresh it. Emulator two-finger and IME support depend
 on host configuration.
 

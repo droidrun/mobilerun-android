@@ -15,8 +15,6 @@ import ai.mobilerun.stream.core.serialDispatcher
 import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * A live stream session to one Mobilerun cloud device: signalling WebSocket plus WebRTC, with the
@@ -53,7 +53,7 @@ import org.webrtc.VideoTrack
  * @param config options.
  * @param scope scope that bounds the session's lifetime and provides its dispatcher.
  */
-public class DeviceStreamSession @InternalStreamApi public constructor(
+public class DeviceStreamSession internal constructor(
     context: Context,
     credentials: StreamCredentialsProvider,
     scope: CoroutineScope,
@@ -63,6 +63,18 @@ public class DeviceStreamSession @InternalStreamApi public constructor(
     logger: ai.mobilerun.stream.core.StreamLogger? = null,
     private val prewarm: (Context) -> Unit = WebRtcRuntime::prewarm,
 ) {
+    /** Creates a session with internal transport seams. */
+    @InternalStreamApi
+    public constructor(
+        context: Context,
+        credentials: StreamCredentialsProvider,
+        scope: CoroutineScope,
+        config: StreamConfig,
+        signalling: SignallingTransportFactory,
+        peers: PeerTransportFactory? = null,
+        logger: ai.mobilerun.stream.core.StreamLogger? = null,
+    ) : this(context, credentials, scope, config, signalling, peers, logger, WebRtcRuntime::prewarm)
+
     /** Creates a session; nothing happens until [start]. */
     public constructor(
         context: Context,

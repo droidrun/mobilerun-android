@@ -25,6 +25,8 @@ public fun interface ApprovalSubscription {
  * Coroutine counterpart of React's useTaskApproval. Callbacks talk to the integrator's backend.
  * Polls every three seconds after fetching unless [subscribe] succeeds. Only the newest fetch
  * result applies. Every decision triggers a refetch, including errors and integrator timeouts.
+ * A subscription failure is reported through `onError` and `state.error` until the next
+ * successful fetch.
  * All methods are thread-safe; [close] or scope cancellation stops work and unsubscribes.
  */
 public class TaskApprovalController(
@@ -32,7 +34,6 @@ public class TaskApprovalController(
     private val fetchApproval: suspend (taskId: String) -> PendingApproval?,
     private val decide: suspend (taskId: String, approvalId: String, decision: ApprovalDecision) -> Unit,
     private val subscribe: ApprovalSubscription? = null,
-    private val pollIntervalMs: Long = if (subscribe == null) 3_000 else 0,
     private val onError: (Throwable) -> Unit = {},
 ) {
     private val job = SupervisorJob(scope.coroutineContext[Job])
@@ -45,13 +46,9 @@ public class TaskApprovalController(
     private var latest = 0L
     private var poll: Job? = null
     private var subscription: Job? = null
-    private var effectivePollIntervalMs = pollIntervalMs
+    private var effectivePollIntervalMs = if (subscribe == null) 3_000L else 0L
     private var fetchError: Throwable? = null
     private var decideError: Throwable? = null
-
-    init {
-        require(pollIntervalMs >= 0) { "pollIntervalMs must be non-negative" }
-    }
 
     /** Binds a task; null/empty disables work and clears all state. */
     public fun setTask(taskId: String?) {
@@ -63,7 +60,7 @@ public class TaskApprovalController(
             poll?.cancel()
             subscription?.cancel()
             this@TaskApprovalController.taskId = next
-            effectivePollIntervalMs = pollIntervalMs
+            effectivePollIntervalMs = if (subscribe == null) 3_000L else 0L
             fetchError = null
             decideError = null
             publish { TaskApprovalState(approval = null, isLoading = next != null) }
@@ -81,7 +78,7 @@ public class TaskApprovalController(
                         fetchError = failure
                         publish()
                         reportError(failure)
-                        effectivePollIntervalMs = if (pollIntervalMs > 0) pollIntervalMs else 3_000
+                        effectivePollIntervalMs = 3_000
                         schedulePoll()
                     }
                     return@launch

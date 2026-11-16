@@ -3,9 +3,9 @@
 
 package ai.mobilerun.stream.core
 
-import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.IceServer
+import ai.mobilerun.stream.protocol.InternalStreamApi
 
 /**
  * The signalling WebSocket of one connection attempt. Implementations deliver their events to the

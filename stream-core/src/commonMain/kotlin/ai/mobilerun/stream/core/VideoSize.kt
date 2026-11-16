@@ -14,7 +14,11 @@ import ai.mobilerun.stream.protocol.InternalStreamApi
  * @property rotation clockwise rotation in degrees (0, 90, 180 or 270) a renderer must apply to
  *   show the frame upright.
  */
-public class VideoSize @InternalStreamApi public constructor(public val width: Int, public val height: Int, public val rotation: Int) {
+public class VideoSize @InternalStreamApi public constructor(
+    public val width: Int,
+    public val height: Int,
+    public val rotation: Int,
+) {
     /** Width of the upright picture: [height] for a 90 or 270 degree rotation, else [width]. */
     public val displayWidth: Int get() = if (rotation % 180 == 0) width else height
 

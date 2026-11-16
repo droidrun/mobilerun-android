@@ -17,6 +17,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class StreamStatsSamplerTest {
+    // Cross-module fixtures keep the SDK-created state's constructor internal to core.
+    private fun reconnecting(attempt: Int): StreamStatus.Reconnecting =
+        StreamStatus.Reconnecting::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+            .newInstance(attempt)
+
     @Test fun samplingRequiresConnectedVisibleSubscriberAndResetsEveryBaseline() = runTest {
         val status = MutableStateFlow<StreamStatus>(StreamStatus.Connected)
         val visible = MutableStateFlow(true)
@@ -48,7 +53,7 @@ class StreamStatsSamplerTest {
         assertEquals(unobserved, calls)
         observer = backgroundScope.launch { sampler.stats.collect() }; runCurrent()
         assertNull(sampler.stats.value?.bitrateKbps)
-        for (exit in listOf(StreamStatus.Reconnecting(1), StreamStatus.Unavailable, StreamStatus.Connecting)) {
+        for (exit in listOf(reconnecting(1), StreamStatus.Unavailable, StreamStatus.Connecting)) {
             status.value = exit; runCurrent()
             assertNull(sampler.stats.value)
             val stopped = calls

@@ -3,9 +3,9 @@
 
 package ai.mobilerun.stream.core
 
-import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.AndroidKeys
 import ai.mobilerun.stream.protocol.ControlMessages
+import ai.mobilerun.stream.protocol.InternalStreamApi
 
 /** Finalized IME text and marked-composition deletion, shared by native input and fixture replay. */
 @InternalStreamApi

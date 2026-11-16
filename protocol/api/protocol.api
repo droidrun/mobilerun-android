@@ -1,0 +1,55 @@
+public final class ai/mobilerun/stream/protocol/ClientMessage$Candidate$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$KeepAlive$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$Offer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$RequestFrame$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$RequestRtcConfiguration$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$ScreenshotRequest$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/IceServer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public abstract interface annotation class ai/mobilerun/stream/protocol/InternalStreamApi : java/lang/annotation/Annotation {
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$Answer$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$Candidate$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$RtcConfiguration$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$Screenshot$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$ScreenshotError$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+

@@ -906,6 +906,10 @@ class StreamSessionEngineTest {
         h.settle()
 
         h.engine.close()
+        socket.serverCloses()
+        peer.emitState(PeerConnectionState.Disconnected)
+        h.settle()
+        assertEquals(StreamStatus.Connected, h.status)
         assertFalse(h.engine.sendControl(byteArrayOf(1))) // at once, before the teardown ran
         h.settle()
         assertTrue(socket.isClosed)
@@ -1026,6 +1030,7 @@ class StreamSessionEngineTest {
         assertContentEquals(byteArrayOf(1, 2, 3), decodeDataUri("data:image/png;base64,AQID"))
         assertFailsWith<IllegalArgumentException> { decodeDataUri("https://example.test") }
     }
+
     @Test
     fun finalWatchdogReleasesPeerAndCannotReconnectWithoutWake() = runTest {
         val h = Harness(this)
@@ -1059,18 +1064,23 @@ class StreamSessionEngineTest {
         assertEquals(8, h.signalling.sockets.size)
     }
 
-    @Test
-    fun tokenRefreshAfterRecoveryWaitsUntilNextMount() = runTest {
+    private suspend fun TestScope.refreshAfterRecovery(url: String): Harness {
         val h = Harness(this)
         h.connect()
         h.gate = CompletableDeferred()
-        h.next = StreamCredentials("wss://stream.test/a", "token-b")
+        h.next = StreamCredentials(url, "token-b")
         h.peer.emitState(PeerConnectionState.Disconnected)
         h.settle()
         h.peer.emitState(PeerConnectionState.Connected)
         h.settle()
         h.gate!!.complete(Unit)
         h.settle()
+        return h
+    }
+
+    @Test
+    fun tokenRefreshAfterRecoveryWaitsUntilNextMount() = runTest {
+        val h = refreshAfterRecovery("wss://stream.test/a")
         assertEquals(StreamStatus.Connected, h.status)
         assertEquals(1, h.signalling.sockets.size)
         assertEquals("token-a", h.socket.credentials.token)
@@ -1080,16 +1090,7 @@ class StreamSessionEngineTest {
 
     @Test
     fun urlRefreshAfterRecoveryRemountsImmediately() = runTest {
-        val h = Harness(this)
-        h.connect()
-        h.gate = CompletableDeferred()
-        h.next = StreamCredentials("wss://stream.test/b", "token-b")
-        h.peer.emitState(PeerConnectionState.Disconnected)
-        h.settle()
-        h.peer.emitState(PeerConnectionState.Connected)
-        h.settle()
-        h.gate!!.complete(Unit)
-        h.settle()
+        val h = refreshAfterRecovery("wss://stream.test/b")
         assertEquals(2, h.signalling.sockets.size)
         assertEquals("wss://stream.test/b", h.socket.credentials.url)
     }

@@ -11,6 +11,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
@@ -28,6 +29,9 @@ class OkHttpSignallingTest {
     private val factory = OkHttpSignallingTransportFactory(client)
     private val serverSide = LinkedBlockingQueue<String>()
     private var serverSocket: WebSocket? = null
+    private var upgrading = false
+    private val serverOpened = CountDownLatch(1)
+    private val serverFinished = CountDownLatch(1)
     private val events = LinkedBlockingQueue<String>()
     private val transports = mutableListOf<OkHttpSignallingTransport>()
 
@@ -48,17 +52,20 @@ class OkHttpSignallingTest {
 
     @AfterTest
     fun tearDown() {
-        runCatching { serverSocket?.close(1000, null) }
+        if (upgrading) assertTrue(serverOpened.await(5, TimeUnit.SECONDS), "server did not open")
+        serverSocket?.close(1000, null)
         transports.forEach { it.close() }
+        if (upgrading) assertTrue(serverFinished.await(5, TimeUnit.SECONDS), "server did not finish")
         client.dispatcher.executorService.shutdown()
         server.shutdown()
     }
 
     private fun upgrade(onOpen: (WebSocket) -> Unit = {}) {
+        upgrading = true
         server.enqueue(
-            MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            MockResponse().withWebSocketUpgrade(object : ServerListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    serverSocket = webSocket
+                    super.onOpen(webSocket, response)
                     onOpen(webSocket)
                 }
 
@@ -67,10 +74,30 @@ class OkHttpSignallingTest {
         )
     }
 
+    private open inner class ServerListener : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            serverSocket = webSocket
+            serverOpened.countDown()
+        }
+
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            webSocket.close(1000, null)
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            serverFinished.countDown()
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            serverFinished.countDown()
+        }
+    }
+
     private fun credentials(token: String = "tok", path: String = "/stream") =
         StreamCredentials("ws://${server.hostName}:${server.port}$path", token)
 
-    private fun open(c: StreamCredentials) = (factory.open(c, listener) as OkHttpSignallingTransport).also { transports += it }
+    private fun open(c: StreamCredentials, target: SignallingListener = listener): OkHttpSignallingTransport =
+        (factory.open(c, target) as OkHttpSignallingTransport).also { transports += it }
 
     private fun next(queue: LinkedBlockingQueue<String>): String? = queue.poll(5, TimeUnit.SECONDS)
 
@@ -150,8 +177,9 @@ class OkHttpSignallingTest {
     @Test
     fun closeSendsNormalFrameAndReleasesListenerWithoutServerAck() {
         val closing = LinkedBlockingQueue<Int>()
-        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket = webSocket }
+        upgrading = true
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : ServerListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { super.onOpen(webSocket, response) }
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { closing += code }
         }))
         val collected = java.lang.ref.ReferenceQueue<SignallingListener>()
@@ -163,7 +191,7 @@ class OkHttpSignallingTest {
                 override fun onFailure(httpStatus: Int?) = Unit
             }
             val reference = java.lang.ref.WeakReference<SignallingListener>(target, collected)
-            val transport = (factory.open(credentials(), target) as OkHttpSignallingTransport).also { transports += it }
+            val transport = open(credentials(), target)
             assertEquals("open", next(events))
             transport.close()
             return reference
@@ -182,11 +210,13 @@ class OkHttpSignallingTest {
         val result = runCatching { factory.open(StreamCredentials("not a url", "t"), listener) }
         assertTrue(result.isFailure)
     }
+
     @Test
     fun closeWithoutServerCodeUsesNormalResponseAndReportsClosed() {
         val responses = LinkedBlockingQueue<Int>()
-        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket = webSocket }
+        upgrading = true
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : ServerListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { super.onOpen(webSocket, response) }
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 responses += code
                 webSocket.close(1000, null)
@@ -198,6 +228,7 @@ class OkHttpSignallingTest {
         assertEquals("closed", next(events))
         assertEquals(1000, responses.poll(5, TimeUnit.SECONDS))
         assertFalse(transport.send("after close"))
+        assertTrue(serverFinished.await(5, TimeUnit.SECONDS), "close handshake did not finish")
     }
 
 }

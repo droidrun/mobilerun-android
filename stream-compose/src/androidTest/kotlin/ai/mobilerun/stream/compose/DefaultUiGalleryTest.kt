@@ -28,6 +28,11 @@ import kotlin.test.assertTrue
 
 /** Offline gallery: no credentials, network or real approval task. */
 class DefaultUiGalleryTest {
+    // Cross-module fixtures keep the SDK-created state's constructor internal to core.
+    private fun reconnecting(attempt: Int): StreamStatus.Reconnecting =
+        StreamStatus.Reconnecting::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+            .newInstance(attempt)
+
     @get:Rule val compose = createComposeRule()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -73,7 +78,7 @@ class DefaultUiGalleryTest {
         }
         compose.onNodeWithText("connecting").assertIsDisplayed()
         shot("connecting")
-        compose.runOnIdle { status = StreamStatus.Reconnecting(2) }
+        compose.runOnIdle { status = reconnecting(2) }
         compose.onNodeWithText("reconnecting (2/6)").assertIsDisplayed()
         shot("reconnecting")
         compose.runOnIdle { status = StreamStatus.Unavailable }

@@ -7,6 +7,7 @@ import ai.mobilerun.stream.core.SignallingListener
 import ai.mobilerun.stream.core.SignallingTransport
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentials
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -14,7 +15,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** The WebSocket URL with the token as the `token` query parameter (replacing an existing one). */
 internal fun socketUrl(credentials: StreamCredentials): HttpUrl {

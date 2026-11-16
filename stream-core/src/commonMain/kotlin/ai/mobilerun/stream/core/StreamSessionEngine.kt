@@ -3,11 +3,11 @@
 
 package ai.mobilerun.stream.core
 
-import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.ClientMessage
 import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
 import ai.mobilerun.stream.protocol.IceServer
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.ServerFrame
 import ai.mobilerun.stream.protocol.ServerMessage
 import ai.mobilerun.stream.protocol.SignallingPhase
@@ -58,9 +58,9 @@ internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
  *
  * ## Credentials
  * The provider is called at [start], once per reconnect cycle (the reconnect controller's heal),
- * and when the server rejects the token (HTTP 401 or 403 on the upgrade). New credentials are applied
- * with a reconnect, except while a backoff wait or the unavailable state is in progress: then they
- * are held for the next attempt (same rule as the reference client).
+ * and when the server rejects the token (HTTP 401 or 403 on the upgrade). A token-only change
+ * while connected is held for the next mount. A URL change, or a change while not connected,
+ * reconnects now unless backoff or unavailable recovery holds it for the next attempt.
  *
  * @param scope scope whose dispatcher runs the engine and whose cancellation closes it.
  * @param credentials where the stream is and how to open it.

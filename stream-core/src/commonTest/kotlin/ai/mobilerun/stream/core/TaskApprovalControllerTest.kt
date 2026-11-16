@@ -38,6 +38,7 @@ class TaskApprovalControllerTest {
         assertEquals(2, calls)
         assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
+
     @Test fun pushDisablesDefaultPollingAndRefetchDoesNotResubscribe() = runTest {
         var changed: () -> Unit = {}
         var subscriptions = 0
@@ -69,18 +70,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertEquals(3, calls)
     }
-    @Test fun explicitPollingCanCoexistWithPush() = runTest {
-        var calls = 0
-        val c = TaskApprovalController(backgroundScope, {
-            calls++
-            null
-        }, { _, _, _ -> }, subscribe = { _, _ -> AutoCloseable {} }, pollIntervalMs = 100)
-        c.setTask("task")
-        runCurrent()
-        advanceTimeBy(100)
-        runCurrent()
-        assertEquals(2, calls)
-    }
+
     @Test fun overlappingFetchesKeepNewest() = runTest {
         val requests = mutableListOf<CompletableDeferred<PendingApproval?>>()
         val c = TaskApprovalController(backgroundScope, { CompletableDeferred<PendingApproval?>().also { requests += it }.await() }, { _, _, _ -> })
@@ -94,6 +84,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertEquals("new", c.state.value.approval?.approvalId)
     }
+
     @Test fun taskChangeAndDisableDropLateFetchesAndOldPush() = runTest {
         val gates = mutableMapOf<String, CompletableDeferred<PendingApproval?>>()
         val listeners = mutableListOf<() -> Unit>()
@@ -120,6 +111,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
+
     @Test fun decisionsAreDeduplicatedAndAlwaysRefetchEvenWhenExpired() = runTest {
         val gate = CompletableDeferred<Unit>()
         val sent = mutableListOf<Triple<String, String, ApprovalDecision>>()
@@ -146,6 +138,7 @@ class TaskApprovalControllerTest {
         assertFalse(c.state.value.isDeciding)
         assertEquals(ApprovalDecision.Approve, c.state.value.decision)
     }
+
     @Test fun notFoundAndConflictPreserveDecisionErrorAfterRefetch() = runTest {
         for (status in listOf(404, 409)) {
             val failure = IllegalStateException("HTTP $status")
@@ -171,6 +164,7 @@ class TaskApprovalControllerTest {
             c.close()
         }
     }
+
     @Test fun fetchFailureRecoversAndDoesNotOverwriteDecisionError() = runTest {
         val fetchError = IllegalStateException("fetch")
         val decisionError = IllegalStateException("decision")
@@ -197,6 +191,7 @@ class TaskApprovalControllerTest {
         assertNull(c.state.value.error)
         assertNull(c.state.value.decision)
     }
+
     @Test fun lateDecisionDoesNotMutateNewTaskOrTriggerItsRefetch() = runTest {
         val gate = CompletableDeferred<Unit>()
         var calls = 0
@@ -220,6 +215,7 @@ class TaskApprovalControllerTest {
         assertNull(c.state.value.error)
         assertFalse(c.state.value.isDeciding)
     }
+
     @Test fun parentCancellationUnsubscribes() = runTest {
         var removed = false
         val parent = kotlinx.coroutines.Job()
@@ -231,6 +227,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertTrue(removed)
     }
+
     @Test fun fetchTimeoutIsAnErrorAndTheNextFetchRecovers() = runTest {
         var timeout = true
         val c = TaskApprovalController(backgroundScope,

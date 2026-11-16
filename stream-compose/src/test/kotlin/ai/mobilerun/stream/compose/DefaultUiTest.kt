@@ -3,10 +3,17 @@
 
 package ai.mobilerun.stream.compose
 
+import ai.mobilerun.stream.android.DeviceStreamSession
 import ai.mobilerun.stream.android.SystemKey
 import ai.mobilerun.stream.core.ApprovalDecision
 import ai.mobilerun.stream.core.PendingApproval
 import ai.mobilerun.stream.core.StreamStatus
+import ai.mobilerun.stream.core.StreamCredentials
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.robolectric.RuntimeEnvironment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.Modifier
@@ -28,6 +35,11 @@ import kotlin.test.assertEquals
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w400dp-h900dp")
 class DefaultUiTest {
+    // Cross-module fixtures keep the SDK-created state's constructor internal to core.
+    private fun reconnecting(attempt: Int): StreamStatus.Reconnecting =
+        StreamStatus.Reconnecting::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+            .newInstance(attempt)
+
     @get:Rule val compose = createComposeRule()
 
     @Test fun streamStatesAndRetry() {
@@ -37,7 +49,7 @@ class DefaultUiTest {
             StreamOverlay(status, StreamLabels(connecting = "starting"), { retries++ })
         } } }
         compose.onNodeWithText("starting").assertIsDisplayed()
-        compose.runOnIdle { status = StreamStatus.Reconnecting(2) }
+        compose.runOnIdle { status = reconnecting(2) }
         compose.onNodeWithText("reconnecting (2/6)").assertIsDisplayed()
         compose.runOnIdle { status = StreamStatus.Connected }
         compose.onNodeWithText("reconnecting (2/6)").assertDoesNotExist()
@@ -46,6 +58,7 @@ class DefaultUiTest {
         compose.onNodeWithText("Retry").performClick()
         compose.runOnIdle { assertEquals(1, retries) }
     }
+
     @Test fun customSlotsAndLabels() {
         var status by mutableStateOf<StreamStatus>(StreamStatus.Connecting)
         var retries = 0
@@ -59,6 +72,7 @@ class DefaultUiTest {
         compose.onNodeWithText("Try again").performClick()
         compose.runOnIdle { assertEquals(1, retries) }
     }
+
     @Test fun navigationMapsKeysAndBlocksDisplayOnly() {
         var enabled by mutableStateOf(true)
         val sent = mutableListOf<SystemKey>()
@@ -71,6 +85,24 @@ class DefaultUiTest {
         compose.onNodeWithContentDescription("Home").assertIsNotEnabled().performClick()
         compose.runOnIdle { assertEquals(3, sent.size) }
     }
+
+    @Test fun closingSessionDisablesNavigation() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val session = DeviceStreamSession(RuntimeEnvironment.getApplication(),
+            { StreamCredentials("wss://stream.example.test", "test") }, scope)
+        try {
+            compose.setContent { DeviceStream(session, observeLifecycle = false) }
+            compose.onNodeWithContentDescription("Home").assertIsEnabled()
+            compose.runOnIdle { session.close() }
+            listOf("Back", "Home", "Recent").forEach {
+                compose.onNodeWithContentDescription(it).assertIsNotEnabled()
+            }
+        } finally {
+            session.close()
+            scope.cancel()
+        }
+    }
+
     @Test fun expiredAndUnknownApprovalsStillForwardDecisionsAndPendingDisables() {
         var pending by mutableStateOf(false)
         var current by mutableStateOf<PendingApproval?>(PendingApproval("one", "future_kind", emptyMap(), "invalid"))
@@ -89,6 +121,7 @@ class DefaultUiTest {
         compose.runOnIdle { current = null }
         compose.onNodeWithText("Waiting for approval").assertDoesNotExist()
     }
+
     @Test fun paymentFieldsCustomActionsAndDeviceStayMounted() {
         var mounts = 0
         val card = PendingApproval("one", "payment_card", mapOf("label" to "Personal", "targetPackage" to "com.shop", "targetHost" to "shop.test"), "invalid")
@@ -110,6 +143,7 @@ class DefaultUiTest {
         compose.onNodeWithText("Details").performClick()
         compose.runOnIdle { assertEquals(1, mounts) }
     }
+
     @Test
     @Config(qualifiers = "w400dp-h900dp-night")
     fun darkSystemDoesNotChangeDefaultThemeUnlessExplicitlyRequested() {

@@ -99,7 +99,7 @@ internal fun BoxScope.StreamOverlay(
     placeholder: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultPlaceholder,
     unavailable: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultUnavailable,
 ) {
-    val overlay = StreamOverlayState(status, labels, retry)
+    val overlay = remember(status, labels, retry) { StreamOverlayState(status, labels, retry) }
     when (status) {
         StreamStatus.Connected -> Unit
         StreamStatus.Unavailable -> Box(

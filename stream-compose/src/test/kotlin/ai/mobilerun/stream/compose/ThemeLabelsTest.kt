@@ -9,6 +9,11 @@ import org.junit.Test
 import kotlin.test.assertEquals
 
 class ThemeLabelsTest {
+    // Cross-module fixtures keep the SDK-created state's constructor internal to core.
+    private fun reconnecting(attempt: Int): StreamStatus.Reconnecting =
+        StreamStatus.Reconnecting::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+            .newInstance(attempt)
+
     @Test fun reactLightTokens() {
         val t = StreamThemeTokens.light()
         assertEquals(listOf(0xFFFFFFFF, 0xFF0A0A0A, 0xFFFFFFFF, 0xFF0A0A0A, 0xFFF5F5F5, 0xFF737373,
@@ -29,9 +34,9 @@ class ThemeLabelsTest {
         val labels = StreamLabels()
         assertEquals("starting", labels.copy(connecting = "starting").statusLabel(StreamStatus.Connecting))
         assertEquals("connecting", labels.statusLabel(StreamStatus.Connecting))
-        assertEquals("reconnecting", labels.statusLabel(StreamStatus.Reconnecting(1)))
-        assertEquals("reconnecting (2/6)", labels.statusLabel(StreamStatus.Reconnecting(2)))
-        assertEquals("Recover 3", labels.copy(reconnectingAttempt = "Recover {attempt}").statusLabel(StreamStatus.Reconnecting(3)))
+        assertEquals("reconnecting", labels.statusLabel(reconnecting(1)))
+        assertEquals("reconnecting (2/6)", labels.statusLabel(reconnecting(2)))
+        assertEquals("Recover 3", labels.copy(reconnectingAttempt = "Recover {attempt}").statusLabel(reconnecting(3)))
     }
     @Test fun approvalEnglishDefaultsMatchReact() {
         val t = TaskApprovalLabels()

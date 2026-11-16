@@ -120,8 +120,8 @@ The separate `StreamHardeningTest` uses the same runner and credentials. It exer
 network loss/restoration, a ten-minute soak (PSS growth bounded by the larger of 32 MiB or 25% of the
 warmed baseline), native-peer teardown and session collection. Run it with
 `STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.StreamHardeningTest scripts/run-e2e.sh stream-android`.
-It restores emulator networking even after failure. A rejected initial device login leaves live
-measurement pending; it is not a successful benchmark or soak result.
+It restores emulator networking even after failure. A rejected initial device login is reported as `Device unavailable:`; it is not a successful
+benchmark or soak result.
 
 ## Video and input
 
@@ -133,7 +133,6 @@ val streamView = DeviceStreamView(context).apply {
 container.addView(streamView, ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 session.start()
 
-streamView.showKeyboard()    // focuses the view and requests the local IME
 streamView.hideKeyboard()
 streamView.sendSystemKey(SystemKey.Back) // also Home and Recent
 // Tapping the video focuses it; show the soft keyboard explicitly:
@@ -169,9 +168,7 @@ The IME requests per-character Latin input with the no-suggestions flag and the 
 stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and horizontal tabs become ENTER/TAB; other
 committed control characters are dropped. Printable IME runs use INJECT_TEXT for every client. The local input buffer does not mirror the remote editor,
 so remote selection, autocorrection and surrounding text are not exposed to the local IME.
-Characters the device's text injection cannot type (for example, emoji and some CJK)
-may not arrive on Cloud Android devices yet. This requires a device-side fix and
-affects every client, including the web component.
+Some emoji and CJK characters may not arrive on Cloud Android devices through text injection.
 
 The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
 own Back handler, for example with AndroidX Activity's `OnBackPressedDispatcher`:
@@ -274,9 +271,8 @@ controller.close() // scope cancellation also cleans up
 ```
 
 The controller loads immediately and polls every 3 seconds after the latest completed fetch. A
-successful subscription turns polling off by default; set `pollIntervalMs` explicitly to combine them or to 0
-to disable it. If subscribing fails, the error is reported through state and `onError`, and polling
-resumes every 3 seconds. Push notifications only refetch. Overlapping/old-task results are dropped. `refetch()` does
+successful subscription turns polling off. If subscribing fails, the error is reported through
+`onError` and `state.error` until the next successful fetch, and polling resumes every 3 seconds. Push notifications only refetch. Overlapping/old-task results are dropped. `refetch()` does
 not re-subscribe. Decisions are deduplicated, and every success/error triggers a refetch, including
 404/409. A decision error survives successful fetches until the next decision or task change; a fetch
 error clears after a successful fetch. `setTask(null)` clears state and stops work. Integrator timeouts/cancellation are errors, while
@@ -347,7 +343,7 @@ approval countdown/decision/refetch. Select it with
 `STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.compose.DefaultUiGalleryTest`.
 The separate `DefaultUiE2eTest` verifies live video with navigation and recovery using deliberately
 expired credentials, then restores the provider and clicks Retry. A 401/404 for the initial valid
-device is reported as pending for the live-device scenario. No real approval task is required.
+device is reported as `Device unavailable:` for the live-device scenario. No real approval task is required.
 
 ## Tests
 

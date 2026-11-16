@@ -3,9 +3,9 @@
 
 package ai.mobilerun.stream.core
 
-import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.AndroidKeys
 import ai.mobilerun.stream.protocol.ControlMessages
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.KeyboardCodes
 
 /** Conformance keyboard routing, with the platform providing its Android keycode and printable text. */
