@@ -117,7 +117,9 @@ subprojects {
 
 apiValidation {
     ignoredProjects.add("sample")
-    nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
+    // Wire representations and their generated serializers are implementation details.
+    ignoredPackages.add("ai.mobilerun.stream.protocol")
+    nonPublicMarkers.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     ignoredClasses.addAll(listOf(
         "ai.mobilerun.stream.compose.ComposableSingletons\$DeviceStreamKt",
         "ai.mobilerun.stream.compose.ComposableSingletons\$TaskApprovalKt",

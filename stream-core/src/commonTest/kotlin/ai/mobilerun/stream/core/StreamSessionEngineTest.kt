@@ -466,11 +466,11 @@ class StreamSessionEngineTest {
     fun hiddenHostPausesKeepAliveAndForegroundResumes() = runTest {
         val h = Harness(this)
         h.connect()
-        h.engine.setHostVisible(false)
+        h.engine.setVisible(false)
         h.settle()
         h.advance(20_000)
         assertTrue(h.socket.framesOf("keepAlive").isEmpty())
-        h.engine.setHostVisible(true)
+        h.engine.setVisible(true)
         h.settle()
         h.advance(10_000)
         assertEquals(1, h.socket.framesOf("keepAlive").size)
@@ -499,7 +499,7 @@ class StreamSessionEngineTest {
         h.engine.close()
         h.settle()
         h.engine.handleWake()
-        h.engine.setHostVisible(true)
+        h.engine.setVisible(true)
         h.settle()
         h.advance(60_000)
         assertEquals(before, h.signalling.sockets.size)
@@ -1026,4 +1026,72 @@ class StreamSessionEngineTest {
         assertContentEquals(byteArrayOf(1, 2, 3), decodeDataUri("data:image/png;base64,AQID"))
         assertFailsWith<IllegalArgumentException> { decodeDataUri("https://example.test") }
     }
+    @Test
+    fun finalWatchdogReleasesPeerAndCannotReconnectWithoutWake() = runTest {
+        val h = Harness(this)
+        h.engine.start()
+        h.settle()
+        repeat(6) { index ->
+            h.socket.serverCloses()
+            h.settle()
+            h.advance(ReconnectPolicy.delayMs(index + 1, 0.5))
+        }
+        h.socket.serverOpens()
+        h.settle()
+        h.socket.serverSends(example("server-rtc-configuration").toString())
+        h.settle()
+        h.socket.serverSends(example("server-answer").toString())
+        h.settle()
+        val lastPeer = h.peer
+        val lastSocket = h.socket
+        h.advance(45_000)
+        assertEquals(StreamStatus.Unavailable, h.status)
+        assertTrue(lastPeer.isClosed)
+        assertTrue(lastSocket.isClosed)
+        val sent = lastSocket.sent.size
+        lastPeer.emitState(PeerConnectionState.Connected)
+        h.advance(10_000)
+        assertEquals(StreamStatus.Unavailable, h.status)
+        assertEquals(sent, lastSocket.sent.size)
+        h.engine.handleWake()
+        h.settle()
+        assertEquals(StreamStatus.Reconnecting(0), h.status)
+        assertEquals(8, h.signalling.sockets.size)
+    }
+
+    @Test
+    fun tokenRefreshAfterRecoveryWaitsUntilNextMount() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.gate = CompletableDeferred()
+        h.next = StreamCredentials("wss://stream.test/a", "token-b")
+        h.peer.emitState(PeerConnectionState.Disconnected)
+        h.settle()
+        h.peer.emitState(PeerConnectionState.Connected)
+        h.settle()
+        h.gate!!.complete(Unit)
+        h.settle()
+        assertEquals(StreamStatus.Connected, h.status)
+        assertEquals(1, h.signalling.sockets.size)
+        assertEquals("token-a", h.socket.credentials.token)
+        h.failAndWaitBackoff(2)
+        assertEquals("token-b", h.socket.credentials.token)
+    }
+
+    @Test
+    fun urlRefreshAfterRecoveryRemountsImmediately() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.gate = CompletableDeferred()
+        h.next = StreamCredentials("wss://stream.test/b", "token-b")
+        h.peer.emitState(PeerConnectionState.Disconnected)
+        h.settle()
+        h.peer.emitState(PeerConnectionState.Connected)
+        h.settle()
+        h.gate!!.complete(Unit)
+        h.settle()
+        assertEquals(2, h.signalling.sockets.size)
+        assertEquals("wss://stream.test/b", h.socket.credentials.url)
+    }
+
 }

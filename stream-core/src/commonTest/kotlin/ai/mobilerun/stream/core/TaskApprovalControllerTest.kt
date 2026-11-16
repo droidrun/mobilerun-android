@@ -36,7 +36,7 @@ class TaskApprovalControllerTest {
         advanceTimeBy(9000)
         runCurrent()
         assertEquals(2, calls)
-        assertEquals(TaskApprovalState(), c.state.value)
+        assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
     @Test fun pushDisablesDefaultPollingAndRefetchDoesNotResubscribe() = runTest {
         var changed: () -> Unit = {}
@@ -118,7 +118,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         listeners.first()()
         runCurrent()
-        assertEquals(TaskApprovalState(), c.state.value)
+        assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
     @Test fun decisionsAreDeduplicatedAndAlwaysRefetchEvenWhenExpired() = runTest {
         val gate = CompletableDeferred<Unit>()
@@ -305,6 +305,35 @@ class TaskApprovalControllerTest {
         c.close()
         runCurrent()
         assertEquals(listOf("subscribe", "unsubscribe"), failures.map { it.message })
+    }
+
+    @Test fun failedSubscriptionReportsErrorAndPollsEveryThreeSeconds() = runTest {
+        val failure = IllegalStateException("subscribe")
+        val errors = mutableListOf<Throwable>()
+        var fetches = 0
+        val c = TaskApprovalController(backgroundScope, {
+            fetches++
+            approval()
+        }, { _, _, _ -> }, subscribe = { _, _ -> throw failure }, onError = { errors += it })
+        c.setTask("task")
+        runCurrent()
+        assertSame(failure, c.state.value.error)
+        assertEquals(listOf<Throwable>(failure), errors)
+        assertEquals(1, fetches)
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(1, fetches)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, fetches)
+        assertNull(c.state.value.error)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(3, fetches)
+        c.close()
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(3, fetches)
     }
 
 }

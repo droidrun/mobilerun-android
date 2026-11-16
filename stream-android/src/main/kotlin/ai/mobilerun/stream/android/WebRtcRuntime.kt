@@ -5,7 +5,6 @@ package ai.mobilerun.stream.android
 
 import android.content.Context
 import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.PeerConnectionFactory
 import java.util.concurrent.Executors
@@ -60,7 +59,6 @@ internal object WebRtcRuntime {
         )
         return PeerConnectionFactory.builder()
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .createPeerConnectionFactory()
     }
 }

@@ -170,7 +170,7 @@ fun DemoApproval(now: () -> Long = System::currentTimeMillis) {
     val controller = remember {
         TaskApprovalController(scope,
             fetchApproval = { fetches++; pending },
-            sendDecision = { _, _, decision -> pending = null; result = "Demo: ${decision.value}" },
+            decide = { _, _, decision -> pending = null; result = "Demo: ${decision.value}" },
             pollIntervalMs = 0)
     }
     DisposableEffect(controller) { controller.setTask("local-demo"); onDispose { controller.close() } }

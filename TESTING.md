@@ -43,9 +43,9 @@ the expected result. Remote state changes persist on that device.
 |---|---|
 | Connect / first frame | The connecting overlay gives way to live video; aspect ratio is preserved. |
 | Tap | The tapped remote control responds, including near the video's edges. |
-| Swipe | A scrollable remote page scrolls in the drag direction. |
-| Two-finger gesture | A zoomable page zooms; Android Emulator supports pinch with Ctrl (Command on macOS) or its multitouch controls. |
-| Type letters, emoji and CJK | Focus a remote field and tap the video to show the keyboard. Latin letters commit per character; CJK composition is finalized before sending. **Known limitation:** emoji and some CJK may not arrive; see below. Install a suitable IME if needed. |
+| Swipe | A scrollable remote screen scrolls in the drag direction. |
+| Two-finger gesture | A zoomable document zooms; Android Emulator supports pinch with Ctrl (Command on macOS) or its multitouch controls. |
+| Type letters, emoji and CJK | Focus a remote field; use `showKeyboard()` to open the soft keyboard explicitly. Tapping the video only focuses it. Latin letters commit per character; CJK composition is finalized before sending. **Known limitation:** emoji and some CJK may not arrive; see below. Install a suitable IME if needed. |
 | Back / Home / Recent | Each navigation button performs the corresponding remote Android action. |
 | Rotate | Rotate the emulator using its toolbar; video remains fitted and touch mapping stays correct. Rotate the remote device too if its app supports it. |
 | Background / foreground | Press the emulator's Home, then reopen Stream sample; the stream resumes or recovers. |
@@ -73,12 +73,10 @@ The library suites cover streaming and input; see README for instrumented checks
 
 ## Known limitations
 
-Events subscriptions await a backend token contract. Publishing has not happened;
+Publishing has not happened;
 use the source checkout. The sample credentials provider reuses the entered token;
 a production backend should refresh it. Emulator two-finger and IME support depend
 on host configuration.
 
-Characters the device's text injection cannot type (for example, emoji and some CJK)
-may not arrive on Cloud Android devices yet. This requires a device-side fix and
-affects every client, including the web component. The emoji/CJK checklist row is
-a known limitation, rather than a passing delivery check.
+Some emoji and CJK characters may not arrive on Cloud Android devices through text injection.
+The emoji/CJK checklist row records this limitation.

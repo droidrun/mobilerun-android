@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.ClientMessage
 import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
@@ -148,7 +149,7 @@ public class StreamSessionEngine(
     }
 
     /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
-    public fun setHostVisible(visible: Boolean) {
+    public fun setVisible(visible: Boolean) {
         engineScope.launchGuarded { hostVisible = visible }
     }
 
@@ -235,7 +236,9 @@ public class StreamSessionEngine(
     }
 
     private fun onSnapshot(snapshot: StreamReconnectSnapshot) {
+        if (closed) return
         mutableStatus.value = snapshot.toStatus()
+        if (snapshot.status == StreamReconnectStatus.Unavailable) releaseConnection()
         log("status ${snapshot.status} attempt=${snapshot.attempt}")
         // A target change that was held back may be applicable now.
         engineScope.launchGuarded { applyPendingTarget() }
@@ -245,6 +248,7 @@ public class StreamSessionEngine(
         val latest = latestTarget ?: return
         val active = activeTarget ?: return
         if (latest == active || controller.shouldDeferTargetChange()) return
+        if (latest.url == active.url && status.value == StreamStatus.Connected) return
         log("applying new credentials")
         remount()
     }
@@ -309,7 +313,6 @@ public class StreamSessionEngine(
             private set
         var controlOpen = false
             private set
-        private var hoverOpen = false
 
         // Remote candidates wait here until the remote description (or the restart answer) is set.
         private var remoteDescriptionSet = false
@@ -350,7 +353,6 @@ public class StreamSessionEngine(
             released = true
             wsOpen = false
             controlOpen = false
-            hoverOpen = false
             scope.cancel()
             val pending = screenshots.values.toList()
             screenshots.clear()
@@ -560,7 +562,6 @@ public class StreamSessionEngine(
                     controlOpen = open
                     if (open) onControlOpened()
                 }
-                DataChannels.hover.id -> hoverOpen = open
             }
         }
 
@@ -596,7 +597,7 @@ public class StreamSessionEngine(
                 else -> {
                     restartRecheck?.cancel()
                     restartRecheck = null
-                            controller.handleDisconnected()
+                    controller.handleDisconnected()
                 }
             }
         }

@@ -27,8 +27,9 @@ internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
     return httpUrl.newBuilder().setQueryParameter("token", credentials.token).build()
 }
 
-internal class OkHttpSignallingTransportFactory(private val client: OkHttpClient) : SignallingTransportFactory {
-    override fun open(credentials: StreamCredentials, listener: SignallingListener): OkHttpSignallingTransport {
+@ai.mobilerun.stream.protocol.InternalStreamApi
+public class OkHttpSignallingTransportFactory(private val client: OkHttpClient) : SignallingTransportFactory {
+    override fun open(credentials: StreamCredentials, listener: SignallingListener): SignallingTransport {
         val transport = OkHttpSignallingTransport(listener)
         transport.socket = client.newWebSocket(Request.Builder().url(socketUrl(credentials)).build(), transport)
         return transport
@@ -62,7 +63,7 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-        webSocket.close(code, null)
+        webSocket.close(1000, null)
         end { it.onClosed() }
     }
 

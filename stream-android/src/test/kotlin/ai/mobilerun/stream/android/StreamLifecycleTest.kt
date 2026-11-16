@@ -113,4 +113,19 @@ class StreamLifecycleTest {
         assertFailsWith<IllegalStateException> { StreamLifecycle(h.context, h.session, h.registry) }
         assertEquals(before, h.registry.observerCount)
     }
+    @Test fun startAfterCloseNeverPrewarmsOrFetchesCredentials() = runTest {
+        var prewarms = 0
+        var fetches = 0
+        val session = DeviceStreamSession(RuntimeEnvironment.getApplication(), {
+            fetches++
+            StreamCredentials("wss://stream.example.test", "test")
+        }, backgroundScope, StreamConfig(), SignallingTransportFactory { _, _ -> error("closed") },
+            prewarm = { prewarms++ })
+        session.close()
+        session.start()
+        runCurrent()
+        assertEquals(0, prewarms)
+        assertEquals(0, fetches)
+    }
+
 }

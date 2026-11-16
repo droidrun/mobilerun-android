@@ -26,6 +26,21 @@ public class StreamNavigationState internal constructor(
     public val onAction: (SystemKey) -> Unit,
 )
 
+/** Immutable connection overlay state with a retry action. */
+@Immutable
+public class StreamOverlayState internal constructor(
+    public val status: StreamStatus,
+    public val labels: StreamLabels,
+    public val retry: () -> Unit,
+)
+
+private val defaultPlaceholder: @Composable BoxScope.(StreamOverlayState) -> Unit = { state ->
+    StreamStatusPill(state.labels.statusLabel(state.status), Modifier.align(Alignment.BottomStart).padding(16.dp))
+}
+private val defaultUnavailable: @Composable BoxScope.(StreamOverlayState) -> Unit = { state ->
+    DefaultUnavailable(state.retry, state.labels)
+}
+
 /**
  * Video, connection overlay and optional navigation. The app owns session start/close.
  * Every slot has default content; pass an empty navigation lambda to omit the bar. Overlay slots
@@ -38,18 +53,15 @@ public fun DeviceStream(
     hasControl: Boolean = true,
     labels: StreamLabels = StreamLabels(),
     observeLifecycle: Boolean = true,
-    placeholder: @Composable BoxScope.(StreamStatus, StreamLabels) -> Unit = { status, text ->
-        StreamStatusPill(text.statusLabel(status), Modifier.align(Alignment.BottomStart).padding(16.dp))
-    },
-    unavailable: @Composable BoxScope.(retry: () -> Unit, StreamLabels) -> Unit = { retry, text ->
-        DefaultUnavailable(retry, text)
-    },
+    placeholder: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultPlaceholder,
+    unavailable: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultUnavailable,
     navigationBar: @Composable (StreamNavigationState) -> Unit = {
         StreamNavigationBar(it.onAction, enabled = it.canControl, labels = it.labels)
     },
 ) {
     val status by session.status.collectAsState()
-    val canControl = hasControl && status != StreamStatus.Unavailable
+    val closed by session.closed.collectAsState()
+    val canControl = hasControl && !closed && status != StreamStatus.Unavailable
     val context = LocalContext.current
     var view by remember { mutableStateOf<DeviceStreamView?>(null) }
     val navigation = remember(canControl, labels, view) {
@@ -84,19 +96,16 @@ internal fun BoxScope.StreamOverlay(
     status: StreamStatus,
     labels: StreamLabels,
     retry: () -> Unit,
-    placeholder: @Composable BoxScope.(StreamStatus, StreamLabels) -> Unit = { state, text ->
-        StreamStatusPill(text.statusLabel(state), Modifier.align(Alignment.BottomStart).padding(16.dp))
-    },
-    unavailable: @Composable BoxScope.(() -> Unit, StreamLabels) -> Unit = { action, text ->
-        DefaultUnavailable(action, text)
-    },
+    placeholder: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultPlaceholder,
+    unavailable: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultUnavailable,
 ) {
+    val overlay = StreamOverlayState(status, labels, retry)
     when (status) {
         StreamStatus.Connected -> Unit
         StreamStatus.Unavailable -> Box(
             Modifier.fillMaxSize().background(StreamTheme.tokens.background),
-        ) { unavailable(retry, labels) }
-        else -> placeholder(status, labels)
+        ) { unavailable(overlay) }
+        else -> placeholder(overlay)
     }
 }
 

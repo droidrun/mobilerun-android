@@ -28,7 +28,7 @@ package ai.mobilerun.stream.protocol
 def const_object(name, doc, entries):
     for key in entries:
         assert IDENT.match(key), f"not a Kotlin identifier: {key}"
-    lines = [f"/** {doc} */", f"public object {name} {{"]
+    lines = [f"/** {doc} */", "@InternalStreamApi", f"public object {name} {{"]
     for key, value in entries.items():
         lines.append(f"    public const val {key}: Int = {value}")
     lines.append("}")
@@ -60,6 +60,7 @@ def main():
         "\n".join(
             [
                 "/** Browser `KeyboardEvent.code` values mapped to Android key codes. */",
+                "@InternalStreamApi",
                 "public object KeyboardCodes {",
                 "    /** Android key code for a `KeyboardEvent.code` string, for example `KeyA` to 29. */",
                 "    public val keycodeByCode: Map<String, Int> = mapOf(",

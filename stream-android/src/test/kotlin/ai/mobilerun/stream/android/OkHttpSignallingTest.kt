@@ -70,7 +70,7 @@ class OkHttpSignallingTest {
     private fun credentials(token: String = "tok", path: String = "/stream") =
         StreamCredentials("ws://${server.hostName}:${server.port}$path", token)
 
-    private fun open(c: StreamCredentials) = factory.open(c, listener).also { transports += it }
+    private fun open(c: StreamCredentials) = (factory.open(c, listener) as OkHttpSignallingTransport).also { transports += it }
 
     private fun next(queue: LinkedBlockingQueue<String>): String? = queue.poll(5, TimeUnit.SECONDS)
 
@@ -163,7 +163,7 @@ class OkHttpSignallingTest {
                 override fun onFailure(httpStatus: Int?) = Unit
             }
             val reference = java.lang.ref.WeakReference<SignallingListener>(target, collected)
-            val transport = factory.open(credentials(), target).also { transports += it }
+            val transport = (factory.open(credentials(), target) as OkHttpSignallingTransport).also { transports += it }
             assertEquals("open", next(events))
             transport.close()
             return reference
@@ -182,4 +182,22 @@ class OkHttpSignallingTest {
         val result = runCatching { factory.open(StreamCredentials("not a url", "t"), listener) }
         assertTrue(result.isFailure)
     }
+    @Test
+    fun closeWithoutServerCodeUsesNormalResponseAndReportsClosed() {
+        val responses = LinkedBlockingQueue<Int>()
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { serverSocket = webSocket }
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                responses += code
+                webSocket.close(1000, null)
+            }
+        }))
+        val transport = open(credentials())
+        assertEquals("open", next(events))
+        transport.onClosing(transport.socket, 1005, "")
+        assertEquals("closed", next(events))
+        assertEquals(1000, responses.poll(5, TimeUnit.SECONDS))
+        assertFalse(transport.send("after close"))
+    }
+
 }

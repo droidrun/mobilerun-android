@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.AMotionEvent
 import ai.mobilerun.stream.protocol.ControlMessages
 

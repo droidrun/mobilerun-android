@@ -6,7 +6,7 @@
 #
 # Set STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.DeviceStreamViewE2eTest for the view
 # scenario, with TAP_X/Y (app icon) and TEXT_X/Y (text field) in upright video pixels.
-# OPEN_URL selects a long page for the scroll assertion.
+# OPEN_URL selects a long document for the scroll assertion.
 # STREAM_E2E_CREDENTIALS is a JSON file with `streamUrl` and `streamToken`. It is piped over stdin into
 # the test app's private files directory; it never enters argv, the repository or the APK.
 # Needs a running emulator or device (adb) and JAVA_HOME / ANDROID_HOME set.
@@ -26,7 +26,7 @@ mkdir -p "$out"
 gallery=false
 [ "${STREAM_E2E_TEST_CLASS:-}" = ai.mobilerun.stream.compose.DefaultUiGalleryTest ] && gallery=true
 if [ "$gallery" = false ] && [ ! -f "$creds" ]; then
-  echo "PENDING: credentials file missing" >&2
+  echo "Credentials file missing" >&2
   exit 2
 fi
 
@@ -68,5 +68,5 @@ adb exec-out run-as "$pkg" tar -cf - -C files/e2e-out . > "$out/screenshots.tar"
 tar -xf "$out/screenshots.tar" -C "$out"
 rm "$out/screenshots.tar"
 grep -q "OK (" "$out/instrument.log" || status=1
-if grep -q 'PENDING: device' "$out/instrument.log"; then status=2; fi
+if grep -q 'Device unavailable:' "$out/instrument.log"; then status=2; fi
 exit "$status"

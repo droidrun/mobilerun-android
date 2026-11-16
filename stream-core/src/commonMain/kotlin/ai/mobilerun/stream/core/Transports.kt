@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.IceServer
 
@@ -122,6 +123,7 @@ public fun interface PeerTransportFactory {
 }
 
 /** Receives diagnostic lines. They never contain tokens, URLs, SDP or ICE credentials. */
+@InternalStreamApi
 public fun interface StreamLogger {
     /** Logs one line. */
     public fun log(message: String)

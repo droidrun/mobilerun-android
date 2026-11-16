@@ -3,7 +3,6 @@
 
 package ai.mobilerun.stream.android
 
-
 import ai.mobilerun.stream.core.VideoSize
 import android.os.SystemClock
 import kotlinx.coroutines.flow.MutableStateFlow

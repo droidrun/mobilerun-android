@@ -51,8 +51,8 @@ class DefaultUiTest {
         var retries = 0
         compose.setContent { Box {
             StreamOverlay(status, StreamLabels(connecting = "Preparing"), { retries++ },
-                { _, labels -> BasicText("Custom ${labels.connecting}") },
-                { retry, _ -> StreamButton("Try again", retry) })
+                { state -> BasicText("Custom ${state.labels.connecting}") },
+                { state -> StreamButton("Try again", state.retry) })
         } }
         compose.onNodeWithText("Custom Preparing").assertIsDisplayed()
         compose.runOnIdle { status = StreamStatus.Unavailable }
@@ -65,7 +65,7 @@ class DefaultUiTest {
         compose.setContent { StreamNavigationBar({ sent += it }, enabled = enabled) }
         listOf("Back", "Home", "Recent").forEach { compose.onNodeWithContentDescription(it).performClick() }
         compose.runOnIdle {
-            assertEquals(listOf(SystemKey.BACK, SystemKey.HOME, SystemKey.RECENT), sent)
+            assertEquals(listOf(SystemKey.Back, SystemKey.Home, SystemKey.Recent), sent)
             enabled = false
         }
         compose.onNodeWithContentDescription("Home").assertIsNotEnabled().performClick()

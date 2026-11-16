@@ -32,7 +32,7 @@ public class StreamLifecycle internal constructor(
     private val observer = LifecycleEventObserver { _, event ->
         if (!closed) when (event) {
             Lifecycle.Event.ON_START -> {
-                session.setHostVisible(true)
+                session.setVisible(true)
                 if (stopped) {
                     stopped = false
                     session.handleWake()
@@ -40,7 +40,7 @@ public class StreamLifecycle internal constructor(
             }
             Lifecycle.Event.ON_STOP -> {
                 stopped = true
-                session.setHostVisible(false)
+                session.setVisible(false)
             }
             else -> Unit
         }
@@ -56,7 +56,7 @@ public class StreamLifecycle internal constructor(
     }
 
     init {
-        session.setHostVisible(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+        session.setVisible(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
         lifecycle.addObserver(observer)
         try {
             connectivity.registerDefaultNetworkCallback(callback)

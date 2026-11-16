@@ -36,7 +36,7 @@ kotlin {
     jvmToolchain(17)
     compilerOptions {
         allWarningsAsErrors.set(true)
-        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+        optIn.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     }
 }
 
@@ -45,8 +45,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
     implementation(libs.androidx.lifecycle.process)
-    // The OkHttpClient is part of StreamConfig.
-    api(libs.okhttp)
+    implementation(libs.okhttp)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -111,9 +111,9 @@ class DefaultUiE2eTest {
         }.build()
         val provider = { if (expired.get()) StreamCredentials(credentials.url, "expired") else credentials }
         var session by mutableStateOf(DeviceStreamSession(context, provider, scope,
-            StreamConfig(httpClient = client, logger = { line ->
+            StreamConfig(), ai.mobilerun.stream.android.OkHttpSignallingTransportFactory(client), logger = { line ->
                 if (!expired.get() && (line.contains("http=401") || line.contains("http=404"))) rejected.set(1)
-            })).also { sessions += it })
+            }).also { sessions += it })
         var tokens by mutableStateOf(StreamThemeTokens.light())
         compose.setContent {
             val host = LocalView.current
@@ -124,7 +124,7 @@ class DefaultUiE2eTest {
         session.start()
         withTimeout(60_000) {
             while (session.status.value != StreamStatus.Connected || session.videoSize.value == null) {
-                check(rejected.get() == 0) { "PENDING: device HTTP 401/404" }
+                check(rejected.get() == 0) { "Device unavailable: HTTP 401/404" }
                 delay(100)
             }
         }

@@ -34,7 +34,7 @@ internal class E2eDevice private constructor(val credentials: StreamCredentials)
 
     suspend fun awaitConnectedWithVideo(session: DeviceStreamSession): VideoSize = withTimeout(60.seconds) {
         while (session.status.value != StreamStatus.Connected || session.videoSize.value == null) {
-            check(rejected.get() == 0) { "PENDING: device HTTP ${rejected.get()}" }
+            check(rejected.get() == 0) { "Device unavailable: HTTP ${rejected.get()}" }
             delay(100)
         }
         requireNotNull(session.videoSize.value)

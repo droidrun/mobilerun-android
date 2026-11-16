@@ -1,7 +1,7 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
-package ai.mobilerun.stream.core
+package ai.mobilerun.stream.protocol
 
 /**
  * Marks implementation building blocks shared across the stream modules: connection engines,

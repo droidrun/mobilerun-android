@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Refresh conformance/fixtures from a pinned tag of the shared conformance
+# Maintainer step: refresh conformance/fixtures from a pinned tag of the shared conformance
 # repository, then regenerate the constants from the new copy.
 #
 # Usage: tool/sync-conformance.sh TAG CONFORMANCE_REPO_PATH
-#   TAG                    git tag to vendor, for example v0.1.0
-#   CONFORMANCE_REPO_PATH  local clone of mobilerun-sdk-conformance
+#   TAG                    git tag to vendor, for example v0.2.0
+#   CONFORMANCE_REPO_PATH  local clone of the shared fixture source
 #                          (or set MOBILERUN_CONFORMANCE_REPO)
 set -euo pipefail
 

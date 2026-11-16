@@ -3,9 +3,6 @@
 
 package ai.mobilerun.stream.android
 
-import ai.mobilerun.stream.core.StreamLogger
-import okhttp3.OkHttpClient
-
 /** Which video codecs the receiver asks the server to use. */
 public enum class VideoCodecPreference {
     /**
@@ -28,14 +25,8 @@ public enum class VideoCodecPreference {
  * @property muted whether the device audio is silent. Defaults to `true`; change it later with
  *   [DeviceStreamSession.setMuted].
  * @property videoCodec codec preference, see [VideoCodecPreference].
- * @property httpClient client for the signalling WebSocket, to share a connection pool, proxy or
- *   TLS settings with the app. It must not set a call timeout (that would end the long-lived
- *   socket). `null` uses a private default client.
- * @property logger receives diagnostic lines; they never contain tokens, URLs, SDP or ICE credentials.
  */
 public class StreamConfig(
     public val muted: Boolean = true,
     public val videoCodec: VideoCodecPreference = VideoCodecPreference.Auto,
-    public val httpClient: OkHttpClient? = null,
-    public val logger: StreamLogger? = null,
 )

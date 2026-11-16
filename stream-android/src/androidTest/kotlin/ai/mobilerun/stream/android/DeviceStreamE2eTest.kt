@@ -55,6 +55,7 @@ class DeviceStreamE2eTest {
     private lateinit var device: E2eDevice
     private lateinit var scope: CoroutineScope
     private lateinit var tap: TappingSignalling
+    private lateinit var peer: WebRtcPeerTransport
     private lateinit var session: DeviceStreamSession
 
     /** Wraps the real signalling: records the offers and answers and lets the test inject server frames. */
@@ -101,9 +102,14 @@ class DeviceStreamE2eTest {
         session = DeviceStreamSession(
             context = context,
             credentials = { device.credentials },
-            config = StreamConfig(logger = { Log.i(TAG, it) }),
+            config = StreamConfig(),
+            logger = { Log.i(TAG, it) },
             scope = scope,
             signalling = tap,
+            peers = ai.mobilerun.stream.core.PeerTransportFactory { configuration, channels, listener ->
+                WebRtcPeerTransportFactory({ WebRtcRuntime.factory(context) }, session.media,
+                    VideoCodecPreference.Auto).create(configuration, channels, listener).also { peer = it }
+            },
         )
     }
 
@@ -235,4 +241,13 @@ class DeviceStreamE2eTest {
 
     private fun CoroutineScope.launchStatuses(into: MutableList<StreamStatus>) =
         launch { session.status.collect { into += it } }
+    @Test
+    fun candidateWithNullMidUsesMediaLineIndex() = runBlocking {
+        session.start()
+        device.awaitConnectedWithVideo(session)
+        peer.addRemoteCandidate("candidate:1 1 UDP 2122260223 192.0.2.1 5000 typ host", null, 1)
+        assertEquals(StreamStatus.Connected, session.status.value)
+        assertTrue(session.screenshot().isNotEmpty())
+    }
+
 }

@@ -7,7 +7,7 @@ public final class ai/mobilerun/stream/compose/ApprovalActionsState {
 }
 
 public final class ai/mobilerun/stream/compose/DeviceStreamKt {
-	public static final fun DeviceStream (Lai/mobilerun/stream/android/DeviceStreamSession;Landroidx/compose/ui/Modifier;ZLai/mobilerun/stream/compose/StreamLabels;ZLkotlin/jvm/functions/Function5;Lkotlin/jvm/functions/Function5;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
+	public static final fun DeviceStream (Lai/mobilerun/stream/android/DeviceStreamSession;Landroidx/compose/ui/Modifier;ZLai/mobilerun/stream/compose/StreamLabels;ZLkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function4;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class ai/mobilerun/stream/compose/StreamControlsKt {
@@ -40,6 +40,13 @@ public final class ai/mobilerun/stream/compose/StreamNavigationState {
 	public final fun getCanControl ()Z
 	public final fun getLabels ()Lai/mobilerun/stream/compose/StreamLabels;
 	public final fun getOnAction ()Lkotlin/jvm/functions/Function1;
+}
+
+public final class ai/mobilerun/stream/compose/StreamOverlayState {
+	public static final field $stable I
+	public final fun getLabels ()Lai/mobilerun/stream/compose/StreamLabels;
+	public final fun getRetry ()Lkotlin/jvm/functions/Function0;
+	public final fun getStatus ()Lai/mobilerun/stream/core/StreamStatus;
 }
 
 public final class ai/mobilerun/stream/compose/StreamTheme {

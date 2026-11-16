@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import kotlin.math.ceil
 import kotlin.time.Instant
 
@@ -48,7 +49,7 @@ public enum class ApprovalDecision(
 }
 
 /** Validated display fields of a payment-card approval. */
-public class PaymentCardDetails(
+public class PaymentCardDetails internal constructor(
     public val card: String,
     public val targetPackage: String,
     public val targetHost: String? = null,

@@ -20,7 +20,7 @@ public sealed interface StreamStatus {
      * The connection dropped or an attempt failed; the session waits out the backoff or retries.
      *
      * @property attempt 1-based number of the upcoming (or in-flight) reconnect attempt; 0 right after
-     *   a manual `retry()` started a fresh cycle.
+     *   `retry()` or `handleWake()` started a fresh cycle.
      */
     public class Reconnecting(public val attempt: Int) : StreamStatus {
         override fun equals(other: Any?): Boolean = other is Reconnecting && other.attempt == attempt
@@ -30,7 +30,7 @@ public sealed interface StreamStatus {
         override fun toString(): String = "Reconnecting(attempt=$attempt)"
     }
 
-    /** The retry budget is spent; only `retry()` starts a new cycle. */
+    /** The retry budget is spent; `retry()` or `handleWake()` starts a new cycle. */
     public data object Unavailable : StreamStatus
 }
 
@@ -41,15 +41,17 @@ internal fun StreamReconnectSnapshot.toStatus(): StreamStatus = when (status) {
     StreamReconnectStatus.Unavailable -> StreamStatus.Unavailable
 }
 
-/** A session operation needs a live connection and there is none. */
-public class StreamNotConnectedException(message: String = "the stream is not connected") :
-    IllegalStateException(message)
+/** A failure reported by a stream operation. */
+public sealed class StreamException protected constructor(message: String) : RuntimeException(message)
 
-/** The connection that a request was waiting on went away before it was answered. */
-public class StreamDisconnectedException : IllegalStateException("the stream connection was closed")
+/** A session operation needs a live connection and there is none. */
+public class StreamNotConnectedException internal constructor() : StreamException("the stream is not connected")
+
+/** The connection ended before a request was answered. */
+public class StreamDisconnectedException internal constructor() : StreamException("the stream connection was closed")
 
 /** The device reported that it could not take the screenshot. */
-public class ScreenshotFailedException(message: String) : RuntimeException(message)
+public class ScreenshotFailedException internal constructor(message: String) : StreamException(message)
 
 /** No screenshot reply arrived within the timeout. */
-public class ScreenshotTimeoutException : RuntimeException("the screenshot timed out")
+public class ScreenshotTimeoutException internal constructor() : StreamException("the screenshot timed out")

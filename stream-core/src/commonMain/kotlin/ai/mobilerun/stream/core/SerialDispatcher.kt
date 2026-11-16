@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,8 @@ import kotlin.coroutines.ContinuationInterceptor
 
 /** One serial context for each controller; timers and callbacks use the same dispatcher. */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
+@InternalStreamApi
+public fun serialDispatcher(scope: CoroutineScope): CoroutineDispatcher {
     val base = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher ?: Dispatchers.Default
     return base.limitedParallelism(1)
 }
