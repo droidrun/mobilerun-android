@@ -142,6 +142,7 @@ public class TaskApprovalController(
     }
 
     private fun schedulePoll() {
+        if (state.value.isLoading) return
         poll?.cancel()
         if (effectivePollIntervalMs > 0) poll = worker.launch {
             delay(effectivePollIntervalMs)

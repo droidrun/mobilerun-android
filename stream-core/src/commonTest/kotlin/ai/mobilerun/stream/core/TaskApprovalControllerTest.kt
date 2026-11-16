@@ -336,4 +336,27 @@ class TaskApprovalControllerTest {
         assertEquals(3, fetches)
     }
 
+    @Test fun failedSubscriptionWaitsForInitialFetchBeforePolling() = runTest {
+        val initial = CompletableDeferred<PendingApproval?>()
+        var fetches = 0
+        val c = TaskApprovalController(backgroundScope, {
+            fetches++
+            initial.await()
+        }, { _, _, _ -> }, subscribe = { _, _ -> error("subscribe") })
+        c.setTask("task")
+        runCurrent()
+        advanceTimeBy(4_000)
+        runCurrent()
+        assertEquals(1, fetches)
+        initial.complete(approval())
+        runCurrent()
+        assertEquals("one", c.state.value.approval?.approvalId)
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(1, fetches)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, fetches)
+    }
+
 }
