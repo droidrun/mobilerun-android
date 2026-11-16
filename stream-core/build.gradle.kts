@@ -5,14 +5,15 @@ plugins {
 
 kotlin {
     compilerOptions {
-        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+        optIn.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     }
 
     sourceSets {
         commonMain.dependencies {
-            // The transport interfaces and the session expose protocol types.
+            // Shared opt-in marker and internal transport types.
             api(project(":protocol"))
             api(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

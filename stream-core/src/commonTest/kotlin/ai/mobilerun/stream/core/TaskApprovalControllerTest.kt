@@ -36,8 +36,9 @@ class TaskApprovalControllerTest {
         advanceTimeBy(9000)
         runCurrent()
         assertEquals(2, calls)
-        assertEquals(TaskApprovalState(), c.state.value)
+        assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
+
     @Test fun pushDisablesDefaultPollingAndRefetchDoesNotResubscribe() = runTest {
         var changed: () -> Unit = {}
         var subscriptions = 0
@@ -69,18 +70,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertEquals(3, calls)
     }
-    @Test fun explicitPollingCanCoexistWithPush() = runTest {
-        var calls = 0
-        val c = TaskApprovalController(backgroundScope, {
-            calls++
-            null
-        }, { _, _, _ -> }, subscribe = { _, _ -> AutoCloseable {} }, pollIntervalMs = 100)
-        c.setTask("task")
-        runCurrent()
-        advanceTimeBy(100)
-        runCurrent()
-        assertEquals(2, calls)
-    }
+
     @Test fun overlappingFetchesKeepNewest() = runTest {
         val requests = mutableListOf<CompletableDeferred<PendingApproval?>>()
         val c = TaskApprovalController(backgroundScope, { CompletableDeferred<PendingApproval?>().also { requests += it }.await() }, { _, _, _ -> })
@@ -94,6 +84,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertEquals("new", c.state.value.approval?.approvalId)
     }
+
     @Test fun taskChangeAndDisableDropLateFetchesAndOldPush() = runTest {
         val gates = mutableMapOf<String, CompletableDeferred<PendingApproval?>>()
         val listeners = mutableListOf<() -> Unit>()
@@ -118,8 +109,9 @@ class TaskApprovalControllerTest {
         runCurrent()
         listeners.first()()
         runCurrent()
-        assertEquals(TaskApprovalState(), c.state.value)
+        assertEquals(TaskApprovalState(approval = null), c.state.value)
     }
+
     @Test fun decisionsAreDeduplicatedAndAlwaysRefetchEvenWhenExpired() = runTest {
         val gate = CompletableDeferred<Unit>()
         val sent = mutableListOf<Triple<String, String, ApprovalDecision>>()
@@ -146,6 +138,7 @@ class TaskApprovalControllerTest {
         assertFalse(c.state.value.isDeciding)
         assertEquals(ApprovalDecision.Approve, c.state.value.decision)
     }
+
     @Test fun notFoundAndConflictPreserveDecisionErrorAfterRefetch() = runTest {
         for (status in listOf(404, 409)) {
             val failure = IllegalStateException("HTTP $status")
@@ -171,6 +164,7 @@ class TaskApprovalControllerTest {
             c.close()
         }
     }
+
     @Test fun fetchFailureRecoversAndDoesNotOverwriteDecisionError() = runTest {
         val fetchError = IllegalStateException("fetch")
         val decisionError = IllegalStateException("decision")
@@ -197,6 +191,7 @@ class TaskApprovalControllerTest {
         assertNull(c.state.value.error)
         assertNull(c.state.value.decision)
     }
+
     @Test fun lateDecisionDoesNotMutateNewTaskOrTriggerItsRefetch() = runTest {
         val gate = CompletableDeferred<Unit>()
         var calls = 0
@@ -220,6 +215,7 @@ class TaskApprovalControllerTest {
         assertNull(c.state.value.error)
         assertFalse(c.state.value.isDeciding)
     }
+
     @Test fun parentCancellationUnsubscribes() = runTest {
         var removed = false
         val parent = kotlinx.coroutines.Job()
@@ -231,6 +227,7 @@ class TaskApprovalControllerTest {
         runCurrent()
         assertTrue(removed)
     }
+
     @Test fun fetchTimeoutIsAnErrorAndTheNextFetchRecovers() = runTest {
         var timeout = true
         val c = TaskApprovalController(backgroundScope,
@@ -305,6 +302,58 @@ class TaskApprovalControllerTest {
         c.close()
         runCurrent()
         assertEquals(listOf("subscribe", "unsubscribe"), failures.map { it.message })
+    }
+
+    @Test fun failedSubscriptionReportsErrorAndPollsEveryThreeSeconds() = runTest {
+        val failure = IllegalStateException("subscribe")
+        val errors = mutableListOf<Throwable>()
+        var fetches = 0
+        val c = TaskApprovalController(backgroundScope, {
+            fetches++
+            approval()
+        }, { _, _, _ -> }, subscribe = { _, _ -> throw failure }, onError = { errors += it })
+        c.setTask("task")
+        runCurrent()
+        assertSame(failure, c.state.value.error)
+        assertEquals(listOf<Throwable>(failure), errors)
+        assertEquals(1, fetches)
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(1, fetches)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, fetches)
+        assertNull(c.state.value.error)
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(3, fetches)
+        c.close()
+        advanceTimeBy(3_000)
+        runCurrent()
+        assertEquals(3, fetches)
+    }
+
+    @Test fun failedSubscriptionWaitsForInitialFetchBeforePolling() = runTest {
+        val initial = CompletableDeferred<PendingApproval?>()
+        var fetches = 0
+        val c = TaskApprovalController(backgroundScope, {
+            fetches++
+            initial.await()
+        }, { _, _, _ -> }, subscribe = { _, _ -> error("subscribe") })
+        c.setTask("task")
+        runCurrent()
+        advanceTimeBy(4_000)
+        runCurrent()
+        assertEquals(1, fetches)
+        initial.complete(approval())
+        runCurrent()
+        assertEquals("one", c.state.value.approval?.approvalId)
+        advanceTimeBy(2_999)
+        runCurrent()
+        assertEquals(1, fetches)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, fetches)
     }
 
 }

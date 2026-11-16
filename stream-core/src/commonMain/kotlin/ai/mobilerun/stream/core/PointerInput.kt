@@ -5,6 +5,7 @@ package ai.mobilerun.stream.core
 
 import ai.mobilerun.stream.protocol.AMotionEvent
 import ai.mobilerun.stream.protocol.ControlMessages
+import ai.mobilerun.stream.protocol.InternalStreamApi
 
 /** Stable touch slots and frame-coalesced movement. Calls must be serial, normally on the UI thread. */
 @InternalStreamApi

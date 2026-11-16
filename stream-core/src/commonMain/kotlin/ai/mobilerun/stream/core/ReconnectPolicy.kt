@@ -3,7 +3,8 @@
 
 package ai.mobilerun.stream.core
 
-import kotlin.math.floor
+import ai.mobilerun.stream.protocol.InternalStreamApi
+import ai.mobilerun.stream.protocol.jsRound
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -45,10 +46,4 @@ public object ReconnectPolicy {
         val base = min(BASE_DELAY_MS * 2.0.pow(maxOf(1, attempt) - 1), MAX_DELAY_MS.toDouble())
         return jsRound(base * (0.75 + random * 0.5)).toLong()
     }
-}
-
-/** `Math.round`: halves round toward positive infinity. */
-private fun jsRound(value: Double): Double {
-    val lower = floor(value)
-    return if (value - lower >= 0.5) lower + 1.0 else lower
 }

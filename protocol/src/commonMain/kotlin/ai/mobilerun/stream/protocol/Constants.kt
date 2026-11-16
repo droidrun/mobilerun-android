@@ -6,6 +6,7 @@
 package ai.mobilerun.stream.protocol
 
 /** Message type byte (first byte) of every binary control message. */
+@InternalStreamApi
 public object ControlMsgType {
     public const val INJECT_KEYCODE: Int = 0
     public const val INJECT_TEXT: Int = 1
@@ -23,6 +24,7 @@ public object ControlMsgType {
 }
 
 /** Motion event actions and mouse button flags used by touch, scroll and hover messages. */
+@InternalStreamApi
 public object AMotionEvent {
     public const val ACTION_DOWN: Int = 0
     public const val ACTION_UP: Int = 1
@@ -36,6 +38,7 @@ public object AMotionEvent {
 }
 
 /** Key actions, meta state flags and Android key codes used by keycode messages. */
+@InternalStreamApi
 public object AndroidKeys {
     public const val ACTION_DOWN: Int = 0
     public const val ACTION_UP: Int = 1
@@ -242,6 +245,7 @@ public object AndroidKeys {
 }
 
 /** Browser `KeyboardEvent.code` values mapped to Android key codes. */
+@InternalStreamApi
 public object KeyboardCodes {
     /** Android key code for a `KeyboardEvent.code` string, for example `KeyA` to 29. */
     public val keycodeByCode: Map<String, Int> = mapOf(

@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
+
 /**
  * A one-second inbound-video sample. Missing WebRTC fields are `null`, never synthesized as zero.
  * Rates and per-frame durations use counter deltas since the preceding report; the first report

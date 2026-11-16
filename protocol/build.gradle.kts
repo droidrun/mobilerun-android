@@ -7,11 +7,12 @@ plugins {
 kotlin {
     compilerOptions {
         optIn.add("kotlinx.serialization.ExperimentalSerializationApi")
+        optIn.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     }
 
     sourceSets {
         commonMain.dependencies {
-            api(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

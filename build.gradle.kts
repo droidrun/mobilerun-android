@@ -117,8 +117,22 @@ subprojects {
 
 apiValidation {
     ignoredProjects.add("sample")
-    nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
+    nonPublicMarkers.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     ignoredClasses.addAll(listOf(
+        // Serialization generates these without the opt-in marker.
+        "ai.mobilerun.stream.protocol.ClientMessage\$Candidate\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$KeepAlive\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$Offer\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$OpenUrl\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$RequestFrame\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$RequestRtcConfiguration\$\$serializer",
+        "ai.mobilerun.stream.protocol.ClientMessage\$ScreenshotRequest\$\$serializer",
+        "ai.mobilerun.stream.protocol.IceServer\$\$serializer",
+        "ai.mobilerun.stream.protocol.ServerMessage\$Answer\$\$serializer",
+        "ai.mobilerun.stream.protocol.ServerMessage\$Candidate\$\$serializer",
+        "ai.mobilerun.stream.protocol.ServerMessage\$RtcConfiguration\$\$serializer",
+        "ai.mobilerun.stream.protocol.ServerMessage\$Screenshot\$\$serializer",
+        "ai.mobilerun.stream.protocol.ServerMessage\$ScreenshotError\$\$serializer",
         "ai.mobilerun.stream.compose.ComposableSingletons\$DeviceStreamKt",
         "ai.mobilerun.stream.compose.ComposableSingletons\$TaskApprovalKt",
     ))

@@ -62,7 +62,6 @@ public class StreamLabels(
     )
 }
 
-
 /** Exactly the keys and English defaults of React's TaskApprovalLabels. */
 @Immutable
 public class TaskApprovalLabels(
@@ -144,7 +143,6 @@ public class TaskApprovalLabels(
         device,
     )
 }
-
 
 internal fun StreamLabels.statusLabel(status: StreamStatus): String = when (status) {
     is StreamStatus.Reconnecting -> if (status.attempt > 1) {

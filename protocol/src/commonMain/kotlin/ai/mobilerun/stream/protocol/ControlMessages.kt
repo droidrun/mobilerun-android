@@ -16,6 +16,7 @@ import kotlin.math.min
  * JavaScript `DataView` would (two's complement wrap), never rejected, so a bad input from the
  * embedding app cannot crash an input handler.
  */
+@InternalStreamApi
 public object ControlMessages {
     private const val TOUCH_SIZE = 32
     private const val SCROLL_SIZE = 21

@@ -28,7 +28,7 @@ kotlin {
     jvmToolchain(17)
     compilerOptions {
         allWarningsAsErrors.set(true)
-        optIn.add("ai.mobilerun.stream.core.InternalStreamApi")
+        optIn.add("ai.mobilerun.stream.protocol.InternalStreamApi")
     }
 }
 
@@ -40,6 +40,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.okhttp)
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)

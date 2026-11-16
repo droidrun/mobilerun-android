@@ -62,7 +62,7 @@ if data.exists():
         lines.append('| ' + ' | '.join(value(row.get(k)) for k in keys) + ' |')
 if status:
     log = (out / 'benchmark-run.log').read_text(errors='replace')
-    reason = 'PENDING: device HTTP 401/404' if 'PENDING: device' in log else 'FAILED: see benchmark-run.log'
+    reason = 'Device unavailable: HTTP 401/404' if 'Device unavailable:' in log else 'FAILED: see benchmark-run.log'
     lines += ['', reason + '; no complete benchmark claimed.']
 else:
     lines += ['', 'Completed. Ten latency samples per connection by default; median and nearest-rank p90.']

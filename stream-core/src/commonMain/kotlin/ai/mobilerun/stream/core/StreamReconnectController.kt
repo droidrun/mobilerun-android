@@ -3,6 +3,7 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import kotlin.random.Random
 
 /** Where a stream is in its connect and recovery cycle. */
@@ -41,8 +42,8 @@ public fun interface ScheduledTask {
 }
 
 /**
- * Source of time for the controller. The core owns no real timers: the embedding app supplies
- * one backed by its main loop, and tests supply a fake clock.
+ * Source of time for the controller. The core owns no real timers: the session engine supplies
+ * one backed by its serial dispatcher, and tests supply a fake clock.
  */
 @InternalStreamApi
 public fun interface ReconnectScheduler {
@@ -185,10 +186,9 @@ public class StreamReconnectController(
     }
 
     /**
-     * Whether a stream-target change (URL or token rotation) must be held back instead of applied
-     * now. True while waiting out a backoff (the scheduled attempt picks up the fresh target by
-     * itself) and while unavailable (retry and wake own recovery there). Everywhere else the new
-     * target applies immediately.
+     * Whether recovery holds a target change for the next attempt: true during backoff and while
+     * unavailable, where retry and wake own recovery. The engine separately holds token-only changes
+     * while connected; a URL change or a change while not connected otherwise remounts immediately.
      */
     public fun shouldDeferTargetChange(): Boolean = recoveryIsScheduled
 

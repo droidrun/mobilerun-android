@@ -4,6 +4,7 @@
 package ai.mobilerun.stream.protocol
 
 /** Timings of the signalling exchange, in milliseconds unless noted. */
+@InternalStreamApi
 public object SignallingTiming {
     /** The WebSocket must be open within this time or the attempt fails. */
     public const val WS_OPEN_TIMEOUT_MS: Long = 15_000
@@ -36,6 +37,7 @@ public object SignallingTiming {
  * @property ordered whether delivery is ordered.
  * @property maxRetransmits retransmit limit, or `null` for fully reliable delivery.
  */
+@InternalStreamApi
 public class DataChannelSpec internal constructor(
     public val label: String,
     public val id: Int,
@@ -44,6 +46,7 @@ public class DataChannelSpec internal constructor(
 )
 
 /** The two data channels every session negotiates. */
+@InternalStreamApi
 public object DataChannels {
     /** Reliable and ordered; carries every binary control message except hover. */
     public val control: DataChannelSpec =

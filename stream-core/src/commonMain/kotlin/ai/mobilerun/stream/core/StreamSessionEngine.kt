@@ -7,6 +7,7 @@ import ai.mobilerun.stream.protocol.ClientMessage
 import ai.mobilerun.stream.protocol.DataChannelSpec
 import ai.mobilerun.stream.protocol.DataChannels
 import ai.mobilerun.stream.protocol.IceServer
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.ServerFrame
 import ai.mobilerun.stream.protocol.ServerMessage
 import ai.mobilerun.stream.protocol.SignallingPhase
@@ -57,9 +58,9 @@ internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
  *
  * ## Credentials
  * The provider is called at [start], once per reconnect cycle (the reconnect controller's heal),
- * and when the server rejects the token (HTTP 401 or 403 on the upgrade). New credentials are applied
- * with a reconnect, except while a backoff wait or the unavailable state is in progress: then they
- * are held for the next attempt (same rule as the reference client).
+ * and when the server rejects the token (HTTP 401 or 403 on the upgrade). A token-only change
+ * while connected is held for the next mount. A URL change, or a change while not connected,
+ * reconnects now unless backoff or unavailable recovery holds it for the next attempt.
  *
  * @param scope scope whose dispatcher runs the engine and whose cancellation closes it.
  * @param credentials where the stream is and how to open it.
@@ -148,7 +149,7 @@ public class StreamSessionEngine(
     }
 
     /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
-    public fun setHostVisible(visible: Boolean) {
+    public fun setVisible(visible: Boolean) {
         engineScope.launchGuarded { hostVisible = visible }
     }
 
@@ -235,7 +236,9 @@ public class StreamSessionEngine(
     }
 
     private fun onSnapshot(snapshot: StreamReconnectSnapshot) {
+        if (closed) return
         mutableStatus.value = snapshot.toStatus()
+        if (snapshot.status == StreamReconnectStatus.Unavailable) releaseConnection()
         log("status ${snapshot.status} attempt=${snapshot.attempt}")
         // A target change that was held back may be applicable now.
         engineScope.launchGuarded { applyPendingTarget() }
@@ -245,6 +248,7 @@ public class StreamSessionEngine(
         val latest = latestTarget ?: return
         val active = activeTarget ?: return
         if (latest == active || controller.shouldDeferTargetChange()) return
+        if (latest.url == active.url && status.value == StreamStatus.Connected) return
         log("applying new credentials")
         remount()
     }
@@ -309,7 +313,6 @@ public class StreamSessionEngine(
             private set
         var controlOpen = false
             private set
-        private var hoverOpen = false
 
         // Remote candidates wait here until the remote description (or the restart answer) is set.
         private var remoteDescriptionSet = false
@@ -350,7 +353,6 @@ public class StreamSessionEngine(
             released = true
             wsOpen = false
             controlOpen = false
-            hoverOpen = false
             scope.cancel()
             val pending = screenshots.values.toList()
             screenshots.clear()
@@ -560,7 +562,6 @@ public class StreamSessionEngine(
                     controlOpen = open
                     if (open) onControlOpened()
                 }
-                DataChannels.hover.id -> hoverOpen = open
             }
         }
 
@@ -596,7 +597,7 @@ public class StreamSessionEngine(
                 else -> {
                     restartRecheck?.cancel()
                     restartRecheck = null
-                            controller.handleDisconnected()
+                    controller.handleDisconnected()
                 }
             }
         }

@@ -96,7 +96,7 @@ public fun StreamNavigationBar(
         Box(Modifier.fillMaxWidth().height(1.dp).background(t.border))
         Row(Modifier.fillMaxWidth().height(48.dp)) {
             val buttons = listOf(
-                SystemKey.BACK to labels.back, SystemKey.HOME to labels.home, SystemKey.RECENT to labels.recent,
+                SystemKey.Back to labels.back, SystemKey.Home to labels.home, SystemKey.Recent to labels.recent,
             )
             buttons.forEach { (key, label) ->
                 Box(
@@ -114,12 +114,12 @@ private fun NavigationIcon(key: SystemKey, color: Color) {
     Canvas(Modifier.size(16.dp)) {
         val stroke = Stroke(1.6.dp.toPx())
         when (key) {
-            SystemKey.BACK -> drawPath(Path().apply {
+            SystemKey.Back -> drawPath(Path().apply {
                 moveTo(size.width * .65f, size.height * .1f)
                 lineTo(size.width * .25f, size.height * .5f)
                 lineTo(size.width * .65f, size.height * .9f)
             }, color, style = stroke)
-            SystemKey.HOME -> drawPath(Path().apply {
+            SystemKey.Home -> drawPath(Path().apply {
                 moveTo(size.width * .1f, size.height * .45f)
                 lineTo(size.width * .5f, size.height * .1f)
                 lineTo(size.width * .9f, size.height * .45f)
@@ -127,7 +127,7 @@ private fun NavigationIcon(key: SystemKey, color: Color) {
                 lineTo(size.width * .1f, size.height * .9f)
                 close()
             }, color, style = stroke)
-            SystemKey.RECENT -> for (x in listOf(.1f, .6f)) for (y in listOf(.1f, .6f)) {
+            SystemKey.Recent -> for (x in listOf(.1f, .6f)) for (y in listOf(.1f, .6f)) {
                 drawRect(color, Offset(size.width * x, size.height * y),
                     androidx.compose.ui.geometry.Size(size.width * .3f, size.height * .3f), style = stroke)
             }

@@ -23,21 +23,22 @@ public fun interface ApprovalSubscription {
 
 /**
  * Coroutine counterpart of React's useTaskApproval. Callbacks talk to the integrator's backend.
- * Polls every three seconds after fetching unless [subscribe] is provided. Only the newest fetch
+ * Polls every three seconds after fetching unless [subscribe] succeeds. Only the newest fetch
  * result applies. Every decision triggers a refetch, including errors and integrator timeouts.
+ * A subscription failure is reported through `onError` and `state.error` until the next
+ * successful fetch.
  * All methods are thread-safe; [close] or scope cancellation stops work and unsubscribes.
  */
 public class TaskApprovalController(
     scope: CoroutineScope,
     private val fetchApproval: suspend (taskId: String) -> PendingApproval?,
-    private val sendDecision: suspend (taskId: String, approvalId: String, decision: ApprovalDecision) -> Unit,
+    private val decide: suspend (taskId: String, approvalId: String, decision: ApprovalDecision) -> Unit,
     private val subscribe: ApprovalSubscription? = null,
-    private val pollIntervalMs: Long = if (subscribe == null) 3_000 else 0,
     private val onError: (Throwable) -> Unit = {},
 ) {
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val worker = CoroutineScope(scope.coroutineContext + serialDispatcher(scope) + job)
-    private val mutableState = MutableStateFlow(TaskApprovalState())
+    private val mutableState = MutableStateFlow(TaskApprovalState(approval = null))
     /** Current approval and progress. Decision errors survive successful refetches. */
     public val state: StateFlow<TaskApprovalState> = mutableState.asStateFlow()
     private var taskId: String? = null
@@ -45,12 +46,9 @@ public class TaskApprovalController(
     private var latest = 0L
     private var poll: Job? = null
     private var subscription: Job? = null
+    private var effectivePollIntervalMs = if (subscribe == null) 3_000L else 0L
     private var fetchError: Throwable? = null
     private var decideError: Throwable? = null
-
-    init {
-        require(pollIntervalMs >= 0) { "pollIntervalMs must be non-negative" }
-    }
 
     /** Binds a task; null/empty disables work and clears all state. */
     public fun setTask(taskId: String?) {
@@ -62,9 +60,10 @@ public class TaskApprovalController(
             poll?.cancel()
             subscription?.cancel()
             this@TaskApprovalController.taskId = next
+            effectivePollIntervalMs = if (subscribe == null) 3_000L else 0L
             fetchError = null
             decideError = null
-            publish { TaskApprovalState(isLoading = next != null) }
+            publish { TaskApprovalState(approval = null, isLoading = next != null) }
             if (next == null) return@launch
             load()
             val bound = generation
@@ -79,6 +78,8 @@ public class TaskApprovalController(
                         fetchError = failure
                         publish()
                         reportError(failure)
+                        effectivePollIntervalMs = 3_000
+                        schedulePoll()
                     }
                     return@launch
                 }
@@ -107,7 +108,7 @@ public class TaskApprovalController(
             decideError = null
             publish { it.copy(isDeciding = true, decision = decision) }
             val failure = try {
-                sendDecision(id, approval.approvalId, decision)
+                decide(id, approval.approvalId, decision)
                 null
             } catch (failure: Throwable) {
                 job.ensureActive()
@@ -137,6 +138,15 @@ public class TaskApprovalController(
         runCatching { onError(failure) }
     }
 
+    private fun schedulePoll() {
+        if (state.value.isLoading) return
+        poll?.cancel()
+        if (effectivePollIntervalMs > 0) poll = worker.launch {
+            delay(effectivePollIntervalMs)
+            load()
+        }
+    }
+
     private fun load() {
         val id = taskId ?: return
         poll?.cancel()
@@ -157,10 +167,7 @@ public class TaskApprovalController(
             } finally {
                 if (isNewest(bound, sequence)) {
                     publish { it.copy(isLoading = false) }
-                    if (pollIntervalMs > 0) poll = worker.launch {
-                        delay(pollIntervalMs)
-                        load()
-                    }
+                    schedulePoll()
                 }
             }
         }

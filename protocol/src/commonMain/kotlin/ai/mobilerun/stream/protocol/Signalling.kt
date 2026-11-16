@@ -26,6 +26,7 @@ internal val SignallingJson: Json = Json {
  * Messages are data classes. Fields are never added to an existing constructor; a new field gets a new type.
  */
 @Serializable
+@InternalStreamApi
 public sealed interface ClientMessage {
     /** The frame as the JSON text to put on the WebSocket. */
     public fun toJson(): String = SignallingJson.encodeToString(ClientMessage.serializer(), this)
@@ -37,6 +38,7 @@ public sealed interface ClientMessage {
      */
     @Serializable
     @SerialName("requestRtcConfiguration")
+    @InternalStreamApi
     public data class RequestRtcConfiguration(val sessionId: String) : ClientMessage {
         /** Opt-in to unsolicited mid-session credential refreshes. Always `true`. */
         @EncodeDefault
@@ -51,6 +53,7 @@ public sealed interface ClientMessage {
      */
     @Serializable
     @SerialName("offer")
+    @InternalStreamApi
     public data class Offer(val sdp: String, val sessionId: String) : ClientMessage
 
     /**
@@ -64,6 +67,7 @@ public sealed interface ClientMessage {
      */
     @Serializable
     @SerialName("candidate")
+    @InternalStreamApi
     public data class Candidate(
         val candidate: String,
         @EncodeDefault val sdpMid: String? = null,
@@ -72,12 +76,13 @@ public sealed interface ClientMessage {
     ) : ClientMessage
 
     /**
-     * Sent every [SignallingTiming.KEEP_ALIVE_INTERVAL_MS] while the page is visible and the socket is open.
+     * Sent every [SignallingTiming.KEEP_ALIVE_INTERVAL_MS] while the host is visible and the socket is open.
      *
      * @property sessionId id of this stream session.
      */
     @Serializable
     @SerialName("keepAlive")
+    @InternalStreamApi
     public data class KeepAlive(val sessionId: String) : ClientMessage
 
     /**
@@ -88,6 +93,7 @@ public sealed interface ClientMessage {
      */
     @Serializable
     @SerialName("requestFrame")
+    @InternalStreamApi
     public data class RequestFrame(val sessionId: String) : ClientMessage
 
     /**
@@ -100,8 +106,10 @@ public sealed interface ClientMessage {
     @Serializable
     @SerialName("openUrl")
     @ConsistentCopyVisibility
+    @InternalStreamApi
     public data class OpenUrl internal constructor(val url: String, val sessionId: String) : ClientMessage {
         /** Factory for [OpenUrl]. */
+        @InternalStreamApi
         public companion object {
             /**
              * Builds the message from the URL the app supplied: the URL is percent-decoded
@@ -121,6 +129,7 @@ public sealed interface ClientMessage {
      */
     @Serializable
     @SerialName("screenshot")
+    @InternalStreamApi
     public data class ScreenshotRequest(val id: String) : ClientMessage
 }
 
@@ -131,6 +140,7 @@ public sealed interface ClientMessage {
  * callers (no `copy`, no destructuring, no generated equality).
  */
 @Serializable
+@InternalStreamApi
 public sealed interface ServerMessage {
     /**
      * SDP answer to the latest offer (initial or ICE restart).
@@ -139,6 +149,7 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("answer")
+    @InternalStreamApi
     public class Answer internal constructor(public val sdp: String) : ServerMessage
 
     /**
@@ -150,6 +161,7 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("candidate")
+    @InternalStreamApi
     public class Candidate internal constructor(
         public val candidate: String,
         @EncodeDefault public val sdpMid: String? = null,
@@ -166,6 +178,7 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("rtcConfiguration")
+    @InternalStreamApi
     public class RtcConfiguration internal constructor(
         @SerialName("rtcConfiguration") public val configuration: JsonObject? = null,
     ) : ServerMessage {
@@ -196,6 +209,7 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("screenshot")
+    @InternalStreamApi
     public class Screenshot internal constructor(
         public val id: String,
         public val dataUri: String,
@@ -209,12 +223,14 @@ public sealed interface ServerMessage {
      */
     @Serializable
     @SerialName("screenshotError")
+    @InternalStreamApi
     public class ScreenshotError internal constructor(
         public val id: String,
         public val message: String,
     ) : ServerMessage
 
     /** Parser entry point. */
+    @InternalStreamApi
     public companion object {
         /**
          * Parses one text frame received in [phase].
@@ -234,6 +250,7 @@ internal fun ServerMessage.toJson(): String = SignallingJson.encodeToString(Serv
 
 /** An ICE server entry of an [ServerMessage.RtcConfiguration]. */
 @Serializable
+@InternalStreamApi
 public class IceServer internal constructor(
     /** One or more server URLs; a single JSON string is read as a one-element list. */
     @Serializable(with = UrlListSerializer::class) public val urls: List<String>,
@@ -244,6 +261,7 @@ public class IceServer internal constructor(
 )
 
 /** Where the connection is, which decides how a received frame is treated. */
+@InternalStreamApi
 public enum class SignallingPhase {
     /** After `requestRtcConfiguration` was sent, before the general message handler is attached. */
     AwaitingRtcConfiguration,
@@ -253,18 +271,22 @@ public enum class SignallingPhase {
 }
 
 /** Result of parsing one received text frame. */
+@InternalStreamApi
 public sealed interface ServerFrame {
     /**
      * A recognised message.
      *
      * @property message the parsed message.
      */
+    @InternalStreamApi
     public class Message(public val message: ServerMessage) : ServerFrame
 
     /** Valid but irrelevant or unknown; drop it silently. */
+    @InternalStreamApi
     public data object Ignored : ServerFrame
 
     /** The frame invalidates the attempt while awaiting the ICE configuration; report a failure. */
+    @InternalStreamApi
     public data object StartupFailure : ServerFrame
 }
 

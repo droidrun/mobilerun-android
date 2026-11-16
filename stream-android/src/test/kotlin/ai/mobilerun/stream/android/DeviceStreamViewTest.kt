@@ -85,7 +85,7 @@ class DeviceStreamViewTest {
         override fun close() = Unit
     }
 
-    private fun withView(block: (DeviceStreamView, RecordingPeer, Activity) -> Unit) = runTest {
+    private fun withView(closeBeforeInput: Boolean = false, block: (DeviceStreamView, RecordingPeer, Activity) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
         val activity = controller.get()
@@ -127,6 +127,7 @@ class DeviceStreamViewTest {
             assertTrue(view.requestFocus())
             assertTrue(view.isAttachedToWindow)
             peer.control.clear()
+            if (closeBeforeInput) session.close()
             block(view, peer, activity)
         } finally {
             view.detach()
@@ -298,12 +299,16 @@ class DeviceStreamViewTest {
     }
 
     @Test
-    fun tapShowsKeyboardButDragDoesNot() = withView { view, _, activity ->
+    fun tapFocusesAndOnlyExplicitActionShowsKeyboard() = withView { view, _, activity ->
         val manager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         val keyboard = Shadow.extract<OwningInputMethodManager>(manager)
         keyboard.owner = view
+        view.clearFocus()
         motion(view, MotionEvent.ACTION_DOWN)
         motion(view, MotionEvent.ACTION_UP)
+        assertTrue(view.hasFocus())
+        assertFalse(keyboard.isSoftInputVisible)
+        view.showKeyboard()
         assertTrue(keyboard.isSoftInputVisible)
         view.hideKeyboard()
         motion(view, MotionEvent.ACTION_DOWN)
@@ -311,8 +316,37 @@ class DeviceStreamViewTest {
         motion(view, MotionEvent.ACTION_UP, points = listOf(700f to 400f))
         assertFalse(keyboard.isSoftInputVisible)
         view.hasControl = false
+        val other = View(activity).apply { isFocusableInTouchMode = true }
+        (view.parent as ViewGroup).addView(other)
+        assertTrue(other.requestFocus())
+        view.clearFocus()
         view.performClick()
+        assertFalse(view.hasFocus())
         assertFalse(keyboard.isSoftInputVisible)
+    }
+
+    @Test
+    fun closedSessionRejectsInputAndKeyboard() = withView(closeBeforeInput = true) { view, peer, activity ->
+        val manager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val keyboard = Shadow.extract<OwningInputMethodManager>(manager)
+        keyboard.owner = view
+        val other = View(activity).apply { isFocusableInTouchMode = true }
+        (view.parent as ViewGroup).addView(other)
+        assertTrue(other.requestFocus())
+        view.clearFocus()
+        assertFalse(motion(view, MotionEvent.ACTION_DOWN))
+        assertFalse(motion(view, MotionEvent.ACTION_UP))
+        motion(view, MotionEvent.ACTION_HOVER_MOVE, mouse = true)
+        motion(view, MotionEvent.ACTION_SCROLL, mouse = true, vertical = 1f)
+        view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A))
+        SystemKey.entries.forEach(view::sendSystemKey)
+        view.showKeyboard()
+        assertFalse(view.hasFocus())
+        assertFalse(keyboard.isSoftInputVisible)
+        assertFalse(view.onCheckIsTextEditor())
+        assertNull(view.onCreateInputConnection(EditorInfo()))
+        peer.control.assertSent()
+        peer.hover.assertSent()
     }
 
     @Test
@@ -326,7 +360,7 @@ class DeviceStreamViewTest {
         val shadow = Shadow.extract<OwningInputMethodManager>(manager)
         view.requestFocus()
         shadow.owner = view
-        view.performClick()
+        view.showKeyboard()
         assertTrue(shadow.isSoftInputVisible)
         other.requestFocus()
         shadow.owner = other

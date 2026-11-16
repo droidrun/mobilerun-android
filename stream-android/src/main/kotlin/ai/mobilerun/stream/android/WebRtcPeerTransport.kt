@@ -157,7 +157,7 @@ internal class WebRtcPeerTransport(
     override suspend fun addRemoteCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int?) {
         // The browser rejects a candidate with neither a media id nor a line index; so do we.
         require(sdpMid != null || sdpMLineIndex != null) { "candidate without sdpMid and sdpMLineIndex" }
-        check(peerConnection.addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex ?: 0, candidate))) {
+        check(peerConnection.addIceCandidate(IceCandidate(sdpMid ?: "", sdpMLineIndex ?: 0, candidate))) {
             "candidate rejected"
         }
     }

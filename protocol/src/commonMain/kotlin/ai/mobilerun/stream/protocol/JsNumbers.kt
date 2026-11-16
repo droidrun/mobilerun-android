@@ -11,7 +11,8 @@ import kotlin.math.truncate
 // Kept bit-exact so every SDK emits the same bytes for the same input.
 
 /** `Math.round`: halves round toward positive infinity (`2.5` to `3`, `-0.5` to `0`, `-1.5` to `-1`). */
-internal fun jsRound(value: Double): Double {
+@InternalStreamApi
+public fun jsRound(value: Double): Double {
     if (value.isNaN() || value.isInfinite()) return value
     val lower = floor(value)
     return if (value - lower >= 0.5) lower + 1.0 else lower

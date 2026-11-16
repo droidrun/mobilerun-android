@@ -167,11 +167,15 @@ fun DemoApproval(now: () -> Long = System::currentTimeMillis) {
     var pending by remember { mutableStateOf<PendingApproval?>(null) }
     var result by remember { mutableStateOf("") }
     var fetches by remember { mutableIntStateOf(0) }
+    var approvalChanged by remember { mutableStateOf<(() -> Unit)?>(null) }
     val controller = remember {
         TaskApprovalController(scope,
             fetchApproval = { fetches++; pending },
-            sendDecision = { _, _, decision -> pending = null; result = "Demo: ${decision.value}" },
-            pollIntervalMs = 0)
+            decide = { _, _, decision -> pending = null; result = "Demo: ${decision.value}" },
+            subscribe = { _, changed ->
+                approvalChanged = changed
+                AutoCloseable { approvalChanged = null }
+            })
     }
     DisposableEffect(controller) { controller.setTask("local-demo"); onDispose { controller.close() } }
     val state by controller.state.collectAsState()
@@ -182,7 +186,7 @@ fun DemoApproval(now: () -> Long = System::currentTimeMillis) {
             result = ""
             pending = PendingApproval("demo", "payment_card", mapOf("label" to "Demo card", "targetPackage" to "example.shop"),
                 Instant.fromEpochMilliseconds(now() + 30_000).toString())
-            controller.refetch()
+            approvalChanged?.invoke()
         })
         if (result.isNotEmpty()) Label("$result · refetched ($fetches)")
         TaskApproval(state.approval, controller::decide, isPending = state.isDeciding, decision = state.decision)

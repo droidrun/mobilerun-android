@@ -1,30 +1,26 @@
 // Copyright 2026 Mobilerun
 // SPDX-License-Identifier: Apache-2.0
 
-@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-
 package ai.mobilerun.stream.android
 
-import ai.mobilerun.stream.core.StreamStats
-
-import ai.mobilerun.stream.core.InternalStreamApi
 import ai.mobilerun.stream.core.PeerTransportFactory
 import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentialsProvider
 import ai.mobilerun.stream.core.StreamSessionEngine
+import ai.mobilerun.stream.core.StreamStats
 import ai.mobilerun.stream.core.StreamStatus
 import ai.mobilerun.stream.core.VideoSize
+import ai.mobilerun.stream.core.serialDispatcher
+import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
 import org.webrtc.EglBase
 import org.webrtc.VideoTrack
@@ -33,14 +29,14 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * A live stream session to one Mobilerun cloud device: signalling WebSocket plus WebRTC, with the
- * same protocol as `@mobilerun/react`; input routing follows conformance v0.2.0 (React adoption pending).
+ * same protocol as `@mobilerun/react`; input routing follows conformance v0.2.0.
  *
  * The session connects on [start], reports its progress in [status], exposes the received video
  * through the Android view. Input mapping and channel sends are handled by the view. When the
  * connection drops it rebuilds itself with exponential backoff and asks the
  * [credentials] provider for fresh credentials. After [ReconnectPolicy.MAX_ATTEMPTS] failed attempts
  * it reports
- * [StreamStatus.Unavailable] until [retry] is called. It has no Android lifecycle coupling: the
+ * [StreamStatus.Unavailable] until [retry] or [handleWake] is called. It has no Android lifecycle coupling: the
  * app decides when to [start] and [close].
  *
  * **Threading.** Pass a [scope] on a background dispatcher (for example `Dispatchers.Default`): the
@@ -64,7 +60,21 @@ public class DeviceStreamSession internal constructor(
     config: StreamConfig,
     signalling: SignallingTransportFactory,
     private val peers: PeerTransportFactory? = null,
+    logger: ai.mobilerun.stream.core.StreamLogger? = null,
+    private val prewarm: (Context) -> Unit = WebRtcRuntime::prewarm,
 ) {
+    /** Creates a session with internal transport seams. */
+    @InternalStreamApi
+    public constructor(
+        context: Context,
+        credentials: StreamCredentialsProvider,
+        scope: CoroutineScope,
+        config: StreamConfig,
+        signalling: SignallingTransportFactory,
+        peers: PeerTransportFactory? = null,
+        logger: ai.mobilerun.stream.core.StreamLogger? = null,
+    ) : this(context, credentials, scope, config, signalling, peers, logger, WebRtcRuntime::prewarm)
+
     /** Creates a session; nothing happens until [start]. */
     public constructor(
         context: Context,
@@ -76,16 +86,19 @@ public class DeviceStreamSession internal constructor(
         credentials,
         scope,
         config,
-        OkHttpSignallingTransportFactory(config.httpClient ?: defaultHttpClient),
+        OkHttpSignallingTransportFactory(defaultHttpClient),
     )
 
     private val appContext = context.applicationContext
     private val sessionJob = SupervisorJob(scope.coroutineContext[Job])
-    private val serial = (scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher
-        ?: Dispatchers.Default).limitedParallelism(1)
+    private val serial = serialDispatcher(scope)
     private val worker = CoroutineScope(scope.coroutineContext + serial + sessionJob)
     private val visible = MutableStateFlow(true)
-    private var activePeer: WebRtcPeerTransport? = null
+    private val mutableClosed = MutableStateFlow(false)
+    /** Session disposal state used by the default UI. */
+    @InternalStreamApi
+    public val closed: StateFlow<Boolean> = mutableClosed.asStateFlow()
+    @Volatile private var activePeer: WebRtcPeerTransport? = null
     internal val media = StreamMedia(config.muted)
     private val nativePeers = WebRtcPeerTransportFactory(
         { WebRtcRuntime.factory(appContext) }, media, config.videoCodec)
@@ -97,13 +110,25 @@ public class DeviceStreamSession internal constructor(
             signalling.open(target, listener)
         },
         peers = peers ?: PeerTransportFactory { configuration, channels, listener ->
-            nativePeers.create(configuration, channels, listener).also { activePeer = it }
+            nativePeers.create(configuration, channels, listener).also {
+                activePeer = it
+                if (isClosed) activePeer = null
+            }
         },
-        logger = config.logger,
+        logger = logger,
     )
 
     private val sampler = StreamStatsSampler(worker, engine.status, visible) { parser ->
         activePeer?.sampleStats(parser)
+    }
+
+    internal val isClosed: Boolean get() = closed.value || !sessionJob.isActive
+
+    init {
+        sessionJob.invokeOnCompletion {
+            mutableClosed.value = true
+            activePeer = null
+        }
     }
 
     /** The connection status. */
@@ -117,8 +142,7 @@ public class DeviceStreamSession internal constructor(
 
     /**
      * The received video track for a renderer; `null` while there is none. It changes with every
-     * reconnect and must not be used after it was replaced: collect this flow and attach or detach
-     * your renderer on each change.
+     * reconnect; the attached view detaches the old track before attaching its replacement.
      */
     internal val videoTrack: StateFlow<VideoTrack?> get() = media.videoTrack
 
@@ -127,7 +151,8 @@ public class DeviceStreamSession internal constructor(
 
     /** Starts connecting. Does nothing if already started or closed. */
     public fun start() {
-        if (peers == null) WebRtcRuntime.prewarm(appContext)
+        if (isClosed) return
+        if (peers == null) prewarm(appContext)
         engine.start()
     }
 
@@ -135,9 +160,9 @@ public class DeviceStreamSession internal constructor(
     public fun retry(): Unit = engine.retry()
 
     /** Pauses keep-alive messages while the host is hidden; does not end the session. */
-    public fun setHostVisible(visible: Boolean) {
+    public fun setVisible(visible: Boolean) {
         this.visible.value = visible
-        engine.setHostVisible(visible)
+        engine.setVisible(visible)
     }
 
     /** Retries a pending recovery immediately, or revives an unavailable session. Never starts a closed session. */
@@ -145,6 +170,8 @@ public class DeviceStreamSession internal constructor(
 
     /** Releases the connection, channels and video. A closed session cannot be restarted. */
     public fun close() {
+        mutableClosed.value = true
+        activePeer = null
         sampler.close()
         engine.close()
         sessionJob.cancel()

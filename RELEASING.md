@@ -37,6 +37,15 @@ until namespace ownership and signing are ready.
 
 1. Set `VERSION_NAME` in `gradle.properties` to a release version such as `0.1.0` (no `-SNAPSHOT`).
    All modules use this single version. Update the README installation examples to match.
+   Replace every pre-release statement in the release PR:
+   - README: “Quick start (from source)” and “External apps can add the published artifact after
+     the first release; until then, use this source checkout.”
+   - README: “Status: pre-release” and the sentence ending “nothing is published.”
+   - README: “Installation (after first release)” and “These coordinates are reserved for the
+     first Maven Central release; they are not available yet.”
+   - TESTING: “Publishing has not happened; use the source checkout.”
+   - RELEASING: “No artifacts have been published yet.”
+   Finalize the `CHANGELOG.md` 0.1.0 entry with the release date and review its feature list.
 2. For deliberate public API changes, run `./gradlew apiDump`, inspect the dump diff and commit it
    with the change. `check` compares public signatures with the committed baseline.
    Declarations marked `InternalStreamApi` are excluded from this contract.

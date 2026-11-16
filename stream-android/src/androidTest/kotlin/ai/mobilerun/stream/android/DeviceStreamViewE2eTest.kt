@@ -63,7 +63,7 @@ class DeviceStreamViewE2eTest {
     fun connect() = runBlocking {
         val device = E2eDevice.load(context)
         session = DeviceStreamSession(context, { device.credentials }, scope,
-            StreamConfig(logger = { Log.i("StreamInputE2E", it) }), device.signalling)
+            StreamConfig(), device.signalling, logger = { Log.i("StreamInputE2E", it) })
         session.start()
         device.awaitConnectedWithVideo(session)
         activity = instrumentation.startActivitySync(Intent(context, InputTestActivity::class.java)
@@ -131,7 +131,7 @@ class DeviceStreamViewE2eTest {
 
     @Test
     fun touchScrollPinchAndLandscapeMapping() = runBlocking {
-        ui { view.sendSystemKey(SystemKey.HOME) }
+        ui { view.sendSystemKey(SystemKey.Home) }
         val home = shot("touch-1-home")
         tap(tapX, tapY)
         assertChanged(home, shot("touch-2-app-opened"), "tap opens the selected app")
@@ -183,9 +183,9 @@ class DeviceStreamViewE2eTest {
                     point(x + 102, size.displayHeight * .5)), pinchTime)
             touch(MotionEvent.ACTION_UP, listOf(point(x - 102, size.displayHeight * .5)), pinchTime)
         }
-        assertChanged(wheeled, shot("touch-6-pinch"), "two-finger gesture changes the page zoom")
+        assertChanged(wheeled, shot("touch-6-pinch"), "two-finger gesture changes the document zoom")
         ui {
-            view.sendSystemKey(SystemKey.HOME)
+            view.sendSystemKey(SystemKey.Home)
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
         val landscapeHome = shot("touch-7-landscape-home")
@@ -197,7 +197,7 @@ class DeviceStreamViewE2eTest {
 
     @Test
     fun typingClipboardNavigationAndDisplayOnly() = runBlocking {
-        ui { view.sendSystemKey(SystemKey.HOME) }
+        ui { view.sendSystemKey(SystemKey.Home) }
         val home = shot("keys-1-home")
         tap(tapX, tapY)
         val opened = shot("keys-2-app-opened")
@@ -242,14 +242,14 @@ class DeviceStreamViewE2eTest {
         }
         val entered = shot("keys-8-enter")
         assertChanged(pasted, entered, "Enter submits the field")
-        ui { view.sendSystemKey(SystemKey.BACK) }
+        ui { view.sendSystemKey(SystemKey.Back) }
         val back = shot("keys-9-back")
-        assertChanged(entered, back, "BACK navigates to the prior page")
-        ui { view.hasControl = false; view.sendSystemKey(SystemKey.HOME) }
+        assertChanged(entered, back, "BACK navigates to the prior screen")
+        ui { view.hasControl = false; view.sendSystemKey(SystemKey.Home) }
         val displayOnly = shot("keys-10-display-only")
         assertTrue(screenshotCrop(back).contentEquals(screenshotCrop(displayOnly)),
             "display-only suppresses HOME; the content crop stays identical")
-        ui { view.hasControl = true; view.sendSystemKey(SystemKey.HOME) }
+        ui { view.hasControl = true; view.sendSystemKey(SystemKey.Home) }
         assertChanged(back, shot("keys-11-home"), "HOME returns to launcher when control is enabled")
     }
 }

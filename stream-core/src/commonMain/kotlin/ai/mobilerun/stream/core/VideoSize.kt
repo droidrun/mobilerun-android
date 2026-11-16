@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.core
 
+import ai.mobilerun.stream.protocol.InternalStreamApi
+
 /**
  * Geometry of the received video. Equality is hand-written and this is no data class: public
  * session types must be able to gain fields without breaking callers.
@@ -12,7 +14,11 @@ package ai.mobilerun.stream.core
  * @property rotation clockwise rotation in degrees (0, 90, 180 or 270) a renderer must apply to
  *   show the frame upright.
  */
-public class VideoSize(public val width: Int, public val height: Int, public val rotation: Int) {
+public class VideoSize @InternalStreamApi public constructor(
+    public val width: Int,
+    public val height: Int,
+    public val rotation: Int,
+) {
     /** Width of the upright picture: [height] for a 90 or 270 degree rotation, else [width]. */
     public val displayWidth: Int get() = if (rotation % 180 == 0) width else height
 

@@ -4,8 +4,8 @@
 package ai.mobilerun.stream.core
 
 /** Approval loading/decision progress. Decision errors take precedence over fetch errors. */
-public class TaskApprovalState(
-    public val approval: PendingApproval? = null,
+public class TaskApprovalState internal constructor(
+    public val approval: PendingApproval?,
     public val isLoading: Boolean = false,
     public val error: Throwable? = null,
     public val isDeciding: Boolean = false,

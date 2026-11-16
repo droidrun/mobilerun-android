@@ -7,6 +7,7 @@ import ai.mobilerun.stream.core.SignallingListener
 import ai.mobilerun.stream.core.SignallingTransport
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentials
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -14,7 +15,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** The WebSocket URL with the token as the `token` query parameter (replacing an existing one). */
 internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
@@ -27,8 +27,9 @@ internal fun socketUrl(credentials: StreamCredentials): HttpUrl {
     return httpUrl.newBuilder().setQueryParameter("token", credentials.token).build()
 }
 
-internal class OkHttpSignallingTransportFactory(private val client: OkHttpClient) : SignallingTransportFactory {
-    override fun open(credentials: StreamCredentials, listener: SignallingListener): OkHttpSignallingTransport {
+@ai.mobilerun.stream.protocol.InternalStreamApi
+public class OkHttpSignallingTransportFactory(private val client: OkHttpClient) : SignallingTransportFactory {
+    override fun open(credentials: StreamCredentials, listener: SignallingListener): SignallingTransport {
         val transport = OkHttpSignallingTransport(listener)
         transport.socket = client.newWebSocket(Request.Builder().url(socketUrl(credentials)).build(), transport)
         return transport
@@ -62,7 +63,7 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-        webSocket.close(code, null)
+        webSocket.close(1000, null)
         end { it.onClosed() }
     }
 

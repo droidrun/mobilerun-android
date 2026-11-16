@@ -35,7 +35,7 @@ import kotlin.math.roundToInt
 
 /** An explicit Android system navigation action. The host's own Back event is never forwarded. */
 public enum class SystemKey(internal val keycode: Int) {
-    BACK(AndroidKeys.KEYCODE_BACK), HOME(AndroidKeys.KEYCODE_HOME), RECENT(AndroidKeys.KEYCODE_APP_SWITCH),
+    Back(AndroidKeys.KEYCODE_BACK), Home(AndroidKeys.KEYCODE_HOME), Recent(AndroidKeys.KEYCODE_APP_SWITCH),
 }
 
 /**
@@ -112,7 +112,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
 
     /** Requests focus and opens the local soft keyboard when attached and controllable. */
     public fun showKeyboard() {
-        if (!hasControl || session == null || !isAttachedToWindow) return
+        if (!canSend || !isAttachedToWindow) return
         if (requestFocus()) inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
 
@@ -210,7 +210,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!hasControl) return false
+        if (!canSend) return false
         val rect = geometry ?: return false
         val mouse = event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE
         fun id(index: Int): Int = if (mouse) PointerInput.MOUSE_ID else event.getPointerId(index)
@@ -252,12 +252,12 @@ public class DeviceStreamView @JvmOverloads public constructor(
 
     override fun performClick(): Boolean {
         super.performClick()
-        showKeyboard()
+        if (canSend) requestFocus()
         return true
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (!hasControl || event.actionMasked != MotionEvent.ACTION_SCROLL) {
+        if (!canSend || event.actionMasked != MotionEvent.ACTION_SCROLL) {
             return super.onGenericMotionEvent(event)
         }
         val rect = geometry ?: return super.onGenericMotionEvent(event)
@@ -278,7 +278,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
     }
 
     private fun sendHover(event: MotionEvent): Boolean {
-        if (!hasControl) return false
+        if (!canSend) return false
         val rect = geometry ?: return false
         if (pointers.isActive(PointerInput.MOUSE_ID)) return false
         val bytes = rect.hover(event.x.toDouble(), event.y.toDouble(), event.buttonState) ?: return false
@@ -311,8 +311,11 @@ public class DeviceStreamView @JvmOverloads public constructor(
         )
     }
 
+    private val canSend: Boolean
+        get() = hasControl && session?.isClosed == false
+
     private val acceptsKeys: Boolean
-        get() = hasControl && hasFocus() && isAttachedToWindow && session != null
+        get() = canSend && hasFocus() && isAttachedToWindow
 
     private fun primaryClipText(): String? {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -320,7 +323,7 @@ public class DeviceStreamView @JvmOverloads public constructor(
             ?.getItemAt(0)?.coerceToText(context)?.toString()
     }
 
-    override fun onCheckIsTextEditor(): Boolean = hasControl && session != null
+    override fun onCheckIsTextEditor(): Boolean = canSend
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         if (!onCheckIsTextEditor()) return null
@@ -360,6 +363,6 @@ public class DeviceStreamView @JvmOverloads public constructor(
     }
 
     private fun sendControl(bytes: ByteArray) {
-        if (hasControl) session?.sendControl(bytes)
+        if (canSend) session?.sendControl(bytes)
     }
 }
