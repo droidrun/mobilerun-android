@@ -298,6 +298,24 @@ class DeviceStreamViewTest {
     }
 
     @Test
+    fun tapShowsKeyboardButDragDoesNot() = withView { view, _, activity ->
+        val manager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        val keyboard = Shadow.extract<OwningInputMethodManager>(manager)
+        keyboard.owner = view
+        motion(view, MotionEvent.ACTION_DOWN)
+        motion(view, MotionEvent.ACTION_UP)
+        assertTrue(keyboard.isSoftInputVisible)
+        view.hideKeyboard()
+        motion(view, MotionEvent.ACTION_DOWN)
+        motion(view, MotionEvent.ACTION_MOVE, points = listOf(700f to 400f))
+        motion(view, MotionEvent.ACTION_UP, points = listOf(700f to 400f))
+        assertFalse(keyboard.isSoftInputVisible)
+        view.hasControl = false
+        view.performClick()
+        assertFalse(keyboard.isSoftInputVisible)
+    }
+
+    @Test
     fun keyboardOwnershipAndFocusLossDoNotHideAnotherEditorsKeyboard() = withView { view, _, activity ->
         val other = View(activity).apply { isFocusableInTouchMode = true }
         val layout = LinearLayout(activity)
@@ -308,7 +326,7 @@ class DeviceStreamViewTest {
         val shadow = Shadow.extract<OwningInputMethodManager>(manager)
         view.requestFocus()
         shadow.owner = view
-        view.showKeyboard()
+        view.performClick()
         assertTrue(shadow.isSoftInputVisible)
         other.requestFocus()
         shadow.owner = other

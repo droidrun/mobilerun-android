@@ -116,6 +116,7 @@ subprojects {
 }
 
 apiValidation {
+    ignoredProjects.add("sample")
     nonPublicMarkers.add("ai.mobilerun.stream.core.InternalStreamApi")
     ignoredClasses.addAll(listOf(
         "ai.mobilerun.stream.compose.ComposableSingletons\$DeviceStreamKt",

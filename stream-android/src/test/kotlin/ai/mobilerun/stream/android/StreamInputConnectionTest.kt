@@ -55,6 +55,53 @@ class StreamInputConnectionTest {
     }
 
     @Test
+    fun successiveCommitsKeepEditingKeys() {
+        // Exercise successive commits, redundant finalization and editing keys.
+        assertTrue(connection.editable.isEmpty())
+        connection.finishComposingText()
+        connection.commitText("q", 1)
+        connection.commitText(" ", 1)
+        connection.commitText("👍", 1)
+        connection.finishComposingText()
+        connection.deleteSurroundingText(1, 0)
+        connection.performEditorAction(EditorInfo.IME_ACTION_DONE)
+        messages.assertSent(
+            ControlMessages.text("q"), ControlMessages.text(" "),
+            ControlMessages.text("👍"),
+            ControlMessages.keycode(0, 67), ControlMessages.keycode(1, 67),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+        )
+    }
+
+    @Test
+    fun cjkCompositionCommitsOnceAndMixedUnicodeControlsStayKeys() {
+        connection.setComposingText("zhong", 1)
+        connection.setComposingText("中文", 1)
+        assertTrue(messages.isEmpty())
+        connection.commitText("中文", 1)
+        connection.finishComposingText()
+        connection.commitText("👋\r\n中文\tend", 1)
+        messages.assertSent(
+            ControlMessages.text("中文"),
+            ControlMessages.text("👋"),
+            ControlMessages.keycode(0, 66), ControlMessages.keycode(1, 66),
+            ControlMessages.text("中文"),
+            ControlMessages.keycode(0, 61), ControlMessages.keycode(1, 61),
+            ControlMessages.text("end"),
+        )
+    }
+
+    @Test
+    fun committedUnicodeRunMatchesSharedFixtureExactlyOnce() {
+        connection.commitText("é中😀é", 1)
+        connection.finishComposingText()
+        // Literal INJECT_TEXT bytes from conformance v0.2.0 input/ime.json, "unicode".
+        assertEquals(listOf("010c000000c3a9e4b8adf09f988065cc81"), messages.map { bytes ->
+            bytes.joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
+        })
+    }
+
+    @Test
     fun largeDeleteRequestsAreBounded() {
         connection.deleteSurroundingText(Int.MAX_VALUE, Int.MAX_VALUE)
         assertEquals(256, messages.size)
