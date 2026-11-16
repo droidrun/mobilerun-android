@@ -45,5 +45,5 @@ adb shell am force-stop "$pkg"
 adb shell run-as "$pkg" mkdir -p files
 adb shell "run-as $pkg sh -c 'cat > files/stream-e2e.json'" < "$creds"
 adb shell am start -n "$pkg/.MainActivity" >/dev/null
-echo "Sample launched. Press Ctrl-C to stop the emulator and release the build lock."
+echo "Sample launched. Press Ctrl-C to stop the emulator."
 while kill -0 "$pid" 2>/dev/null; do sleep 2; done
