@@ -450,9 +450,14 @@ public class StreamSessionEngine(
 
         override fun onClosed(code: Int) = post {
             wsOpen = false
+            if (code == GOING_AWAY) {
+                releaseConnection()
+                controller.handleFailure()
+                return@post
+            }
             if (failed) return@post
             log("websocket closed")
-            fail(releaseImmediately = code == GOING_AWAY)
+            fail()
         }
 
         override fun onFailure(httpStatus: Int?) = post {

@@ -364,6 +364,29 @@ class StreamSessionEngineTest {
     }
 
     @Test
+    fun goingAwayAfterPeerFailureStillReleasesBeforeBackoff() = runTest {
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = { "key" }))
+        h.connect()
+        val oldPeer = h.peer
+        val oldSocket = h.socket
+        oldPeer.emitState(PeerConnectionState.Failed)
+        h.settle()
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertFalse(oldPeer.isClosed)
+        oldSocket.serverCloses(1001)
+        h.settle()
+        assertTrue(oldPeer.isClosed)
+        assertTrue(oldSocket.isClosed)
+        assertFalse(h.engine.sendControl(byteArrayOf(1)))
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
+        h.advance(999)
+        assertEquals(1, h.signalling.sockets.size)
+        h.advance(1)
+        assertEquals(2, h.signalling.sockets.size)
+    }
+
+    @Test
     fun ordinaryCloseKeepsExistingReleaseTimingInProviderMode() = runTest {
         val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = { "key" }))
         h.connect()
