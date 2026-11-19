@@ -17,7 +17,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val state = ViewModelProvider(this)[SampleLaunchState::class.java]
         setContentView(ComposeView(this).apply {
-            setContent { SampleApp(state.credentials, state.loadFailed) { state.updateCredentials(it) } }
+            setContent {
+                SampleApp(state.credentials, state.loadFailed, state.backend) { state.updateCredentials(it) }
+            }
         })
     }
 }
@@ -25,13 +27,16 @@ class MainActivity : ComponentActivity() {
 // Retain loaded credentials through activity recreation, without saving them to instance state.
 class SampleLaunchState(application: Application) : AndroidViewModel(application) {
     private val file = File(application.filesDir, "stream-e2e.json")
-    private val loaded = runCatching { if (file.exists()) parseCredentials(file.readText()) else null }
-    var credentials = loaded.getOrNull()
+    private val loaded = runCatching { if (file.exists()) parseLaunchConfig(file.readText()) else null }
+    var credentials = loaded.getOrNull()?.credentials
+    var backend = loaded.getOrNull()?.backend
+        private set
     var loadFailed = loaded.isFailure
         private set
 
     fun updateCredentials(value: StreamCredentials) {
         credentials = value
+        backend = null
         loadFailed = false
     }
     init { file.delete() }

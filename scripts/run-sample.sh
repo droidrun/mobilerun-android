@@ -22,6 +22,7 @@ pid=""
 cleanup() {
   if [ -n "$pid" ]; then
     adb shell run-as "$pkg" rm -f files/stream-e2e.json >/dev/null 2>&1 || true
+    adb reverse --remove tcp:3001 >/dev/null 2>&1 || true
     adb emu kill >/dev/null 2>&1 || true
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -40,6 +41,14 @@ for ((i=0; i<180; i++)); do
   sleep 1
 done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { echo "Emulator boot timed out" >&2; exit 1; }
+if python3 - "$creds" <<'PYCONFIG'
+import json, sys
+with open(sys.argv[1]) as source:
+    sys.exit(0 if "helperBaseUrl" in json.load(source) else 1)
+PYCONFIG
+then
+  adb reverse tcp:3001 tcp:3001
+fi
 adb install -r sample/build/outputs/apk/debug/sample-debug.apk
 adb shell am force-stop "$pkg"
 adb shell run-as "$pkg" mkdir -p files

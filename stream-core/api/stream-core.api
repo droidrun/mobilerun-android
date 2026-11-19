@@ -45,9 +45,11 @@ public final class ai/mobilerun/stream/core/ScreenshotTimeoutException : ai/mobi
 }
 
 public final class ai/mobilerun/stream/core/StreamCredentials {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getToken ()Ljava/lang/String;
+	public final fun getTokenProvider ()Lkotlin/jvm/functions/Function1;
 	public final fun getUrl ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

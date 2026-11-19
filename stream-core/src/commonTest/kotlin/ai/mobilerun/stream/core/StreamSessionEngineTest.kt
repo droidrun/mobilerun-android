@@ -12,6 +12,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
@@ -134,6 +137,331 @@ private class Harness(
 }
 
 class StreamSessionEngineTest {
+    @Test
+    fun tokenProviderIdentityIsNotPartOfCredentials() {
+        val a = StreamCredentials("wss://stream.test/a", tokenProvider = { "key-a" })
+        val b = StreamCredentials("wss://stream.test/a", tokenProvider = { "key-b" })
+        assertEquals(a, b)
+        assertEquals(a.hashCode(), b.hashCode())
+        assertEquals("StreamCredentials(url=<redacted>, token=<redacted>)", a.toString())
+    }
+
+    @Test
+    fun tokenProviderPerSocket() = runTest {
+        val keys = mutableListOf<CompletableDeferred<String>>()
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", "static") {
+            CompletableDeferred<String>().also { keys += it }.await()
+        })
+        h.engine.start()
+        h.settle()
+        assertEquals(1, keys.size)
+        assertTrue(h.signalling.sockets.isEmpty())
+        keys[0].complete(" key-a +&= ")
+        h.settle()
+        assertEquals(" key-a +&= ", h.socket.credentials.token)
+        assertEquals(null, h.socket.credentials.tokenProvider)
+        h.socket.serverRejects(401)
+        h.settle()
+        h.advance(1_000)
+        assertEquals(2, keys.size)
+        assertEquals(1, h.signalling.sockets.size)
+        keys[1].complete("key-b")
+        h.settle()
+        assertEquals("key-b", h.socket.credentials.token)
+        h.socket.serverCloses()
+        h.settle()
+        h.engine.handleWake()
+        h.settle()
+        assertEquals(3, keys.size)
+        keys[2].complete("key-c")
+        h.settle()
+        assertEquals(listOf(" key-a +&= ", "key-b", "key-c"),
+            h.signalling.sockets.map { it.credentials.token })
+        assertEquals(2, h.credentialCalls)
+    }
+
+    @Test
+    fun tokenProviderFailureNoFallback() = runTest {
+        val providers: List<StreamTokenProvider> = listOf(
+            { throw IllegalStateException("private-key") },
+            { throw kotlinx.coroutines.CancellationException("private-key") },
+            { "" },
+            { " \t\n" },
+            { "\u2003\u00a0" },
+        )
+        providers.forEach { provider ->
+            val h = Harness(this, StreamCredentials("wss://stream.test/a?token=embedded", "static", provider))
+            h.engine.start()
+            h.settle()
+            assertTrue(h.signalling.sockets.isEmpty())
+            assertEquals(StreamStatus.Reconnecting(1), h.status)
+            assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
+            assertTrue(h.log.none { it.contains("private-key") })
+            h.engine.close()
+            h.settle()
+        }
+    }
+
+    @Test
+    fun tokenProviderDeadline() = runTest {
+        val late = CompletableDeferred<String>()
+        var calls = 0
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", "static") {
+            calls++
+            withContext(NonCancellable) { late.await() }
+        })
+        h.engine.start()
+        h.settle()
+        h.advance(9_999)
+        assertEquals(StreamStatus.Connecting, h.status)
+        assertTrue(h.signalling.sockets.isEmpty())
+        h.advance(1)
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        late.complete("late-key")
+        h.settle()
+        assertTrue(h.signalling.sockets.isEmpty())
+        assertEquals(1, calls)
+        assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
+    }
+
+    @Test
+    fun tokenProviderStaleAfterCloseOrParentCancellation() = runTest {
+        val stops: List<(Harness) -> Unit> = listOf({ it.engine.close() }, { it.host.cancel() })
+        stops.forEach { stop ->
+            val late = CompletableDeferred<String>()
+            val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+                withContext(NonCancellable) { late.await() }
+            }))
+            h.engine.start()
+            h.settle()
+            stop(h)
+            h.settle()
+            val logs = h.log.toList()
+            late.complete("late-key")
+            h.advance(60_000)
+            assertTrue(h.signalling.sockets.isEmpty())
+            assertEquals(logs, h.log)
+        }
+    }
+
+    @Test
+    fun tokenProviderLateRejectionAfterDeadlineIsSilent() = runTest {
+        val late = CompletableDeferred<String>()
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+            withContext(NonCancellable) { late.await() }
+        }))
+        h.engine.start()
+        h.settle()
+        h.advance(10_000)
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        late.completeExceptionally(IllegalStateException("private-key"))
+        h.settle()
+        assertTrue(h.signalling.sockets.isEmpty())
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
+        assertTrue(h.log.none { it.contains("private-key") })
+    }
+
+    @Test
+    fun tokenProviderStaleAfterTargetReplacement() = runTest {
+        val late = CompletableDeferred<String>()
+        var calls = 0
+        val results = ArrayDeque<StreamTokenProvider>(listOf(
+            { "first" },
+            { withContext(NonCancellable) { late.await() } },
+        ))
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+            calls++
+            results.removeFirst()()
+        }))
+        h.engine.start()
+        h.settle()
+        val discovery = CompletableDeferred<Unit>()
+        h.gate = discovery
+        h.next = StreamCredentials("wss://stream.test/b", tokenProvider = { "key-b" })
+        h.socket.serverRejects(401)
+        h.settle()
+        h.advance(1_000)
+        assertEquals(2, calls)
+        discovery.complete(Unit)
+        h.settle()
+        assertEquals("wss://stream.test/b", h.socket.credentials.url)
+        late.complete("stale-a")
+        h.settle()
+        assertEquals(listOf("first", "key-b"), h.signalling.sockets.map { it.credentials.token })
+    }
+
+    @Test
+    fun providerWatchdogStartsAtSocketIncludingFinalRetry() = runTest {
+        var calls = 0
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+            calls++
+            delay(9_000)
+            "key-$calls"
+        }))
+        h.engine.start()
+        h.settle()
+        val backoffs = listOf(1_000L, 2_000L, 4_000L, 8_000L, 16_000L, 30_000L)
+        backoffs.forEachIndexed { index, backoff ->
+            h.advance(9_000)
+            h.negotiate()
+            h.advance(44_999)
+            assertEquals(index + 1, h.signalling.sockets.size)
+            assertTrue(h.status !is StreamStatus.Unavailable)
+            assertEquals(index, h.log.count { it.startsWith("status Reconnecting attempt=") })
+            h.advance(1)
+            assertEquals(StreamStatus.Reconnecting(index + 1), h.status)
+            h.advance(backoff)
+        }
+        h.advance(9_000)
+        h.negotiate()
+        h.advance(44_999)
+        assertEquals(StreamStatus.Reconnecting(6), h.status)
+        h.advance(1)
+        assertEquals(StreamStatus.Unavailable, h.status)
+        assertEquals(7, calls)
+        h.engine.retry()
+        h.settle()
+        h.advance(9_000)
+        assertEquals(8, calls)
+        assertEquals(8, h.signalling.sockets.size)
+    }
+
+    @Test
+    fun goingAwayReleasesBeforeBackoff() = runTest {
+        var calls = 0
+        val dynamic: StreamTokenProvider = {
+            calls++
+            "key-$calls"
+        }
+        val cases: List<Pair<StreamTokenProvider?, String>> = listOf(null to "static", dynamic to "key-2")
+        cases.forEach { (provider, expectedToken) ->
+            val h = Harness(this, StreamCredentials("wss://stream.test/a", "static", provider))
+            h.connect()
+            val oldPeer = h.peer
+            val oldSocket = h.socket
+            val screenshot = attempt { h.engine.screenshot() }
+            h.settle()
+            oldSocket.serverCloses(1001)
+            h.settle()
+            assertEquals(StreamStatus.Reconnecting(1), h.status)
+            assertTrue(oldPeer.isClosed)
+            assertTrue(oldSocket.isClosed)
+            assertFalse(h.engine.sendControl(byteArrayOf(1)))
+            assertFalse(h.engine.sendHover(byteArrayOf(1)))
+            assertFailsWith<StreamDisconnectedException> { screenshot.await().getOrThrow() }
+            oldPeer.emitState(PeerConnectionState.Connected)
+            h.settle()
+            assertEquals(StreamStatus.Reconnecting(1), h.status)
+            h.advance(999)
+            assertEquals(1, h.signalling.sockets.size)
+            h.advance(1)
+            assertEquals(2, h.signalling.sockets.size)
+            assertEquals(expectedToken, h.socket.credentials.token)
+            h.engine.close()
+            h.settle()
+        }
+    }
+
+    @Test
+    fun ordinaryCloseKeepsExistingReleaseTimingInProviderMode() = runTest {
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = { "key" }))
+        h.connect()
+        val old = h.peer
+        h.socket.serverCloses(1006)
+        h.settle()
+        assertFalse(old.isClosed)
+        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        h.advance(1_000)
+        assertTrue(old.isClosed)
+    }
+
+    @Test
+    fun providerUrlPolicy() = runTest {
+        val allowed = listOf("wss://stream.test/a", "WSS://stream.test:443/a", "ws://localhost:3001/a",
+            "ws://127.0.0.1/a", "ws://[::1]/a", "ws://[0:0:0:0:0:0:0:1]/a", "ws://[0::0001]/a")
+        val denied = listOf("ws://stream.test/a", "ws://localhost.evil/a", "ws://evil-localhost/a",
+            "ws://localhost@evil.test/a", "ws://127.0.0.2/a", "https://stream.test/a", "wss:///a",
+            "wss://", "not a url", "wss://stream.test:99999/a", "ws://[::2]/a")
+        (allowed.map { it to 1 } + denied.map { it to 0 }).forEach { (url, expectedCount) ->
+            var calls = 0
+            val h = Harness(this, StreamCredentials(url, tokenProvider = {
+                calls++
+                "key"
+            }))
+            h.engine.start()
+            h.settle()
+            assertEquals(expectedCount, calls, url)
+            assertEquals(expectedCount, h.signalling.sockets.size, url)
+            h.engine.close()
+            h.settle()
+        }
+    }
+
+    @Test
+    fun providerIceRefreshDoesNotMintAndKeepaliveStartsAtSocket() = runTest {
+        val key = CompletableDeferred<String>()
+        var calls = 0
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+            calls++
+            key.await()
+        }))
+        h.engine.start()
+        h.settle()
+        h.advance(9_000)
+        key.complete("key")
+        h.settle()
+        h.connect()
+        h.socket.serverSends(example("server-rtc-configuration").toString())
+        h.settle()
+        assertEquals(1, calls)
+        assertEquals(listOf(false, true), h.peer.offers)
+        h.advance(9_999)
+        assertTrue(h.socket.framesOf("keepAlive").isEmpty())
+        h.advance(1)
+        assertEquals(1, h.socket.framesOf("keepAlive").size)
+        h.engine.setVisible(false)
+        h.settle()
+        h.advance(10_000)
+        assertEquals(1, h.socket.framesOf("keepAlive").size)
+        h.engine.setVisible(true)
+        h.settle()
+        h.advance(10_000)
+        assertEquals(2, h.socket.framesOf("keepAlive").size)
+    }
+
+    @Test
+    fun providerOnlyUpdateKeepsHealthyConnectionAndUsesLatestCallbackNextTime() = runTest {
+        var oldCalls = 0
+        var newCalls = 0
+        val h = Harness(this, StreamCredentials("wss://stream.test/a", tokenProvider = {
+            oldCalls++
+            "old"
+        }))
+        h.connect()
+        val discovery = CompletableDeferred<Unit>()
+        h.gate = discovery
+        h.next = StreamCredentials("wss://stream.test/a", tokenProvider = {
+            newCalls++
+            "new"
+        })
+        h.peer.emitState(PeerConnectionState.Disconnected)
+        h.settle()
+        h.peer.emitState(PeerConnectionState.Connected)
+        h.settle()
+        discovery.complete(Unit)
+        h.settle()
+        assertEquals(StreamStatus.Connected, h.status)
+        assertEquals(1, h.signalling.sockets.size)
+        assertEquals(0, newCalls)
+        h.socket.serverCloses(1001)
+        h.settle()
+        h.advance(2_000)
+        assertEquals("new", h.socket.credentials.token)
+        assertEquals(1, oldCalls)
+        assertEquals(1, newCalls)
+    }
+
     @Test
     fun happyPathReplaysTheSequenceFixture() = runTest {
         val h = Harness(this)

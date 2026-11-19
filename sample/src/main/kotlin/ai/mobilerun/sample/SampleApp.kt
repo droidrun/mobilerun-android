@@ -62,8 +62,13 @@ import kotlin.time.Instant
 import java.util.Locale
 
 @Composable
-fun SampleApp(initial: StreamCredentials? = null, loadFailed: Boolean = false, onCredentialsChange: (StreamCredentials) -> Unit = {}) {
-    SampleTheme { labels -> SampleContent(initial, loadFailed, labels, onCredentialsChange) }
+fun SampleApp(
+    initial: StreamCredentials? = null,
+    loadFailed: Boolean = false,
+    backend: SampleBackend? = null,
+    onCredentialsChange: (StreamCredentials) -> Unit = {},
+) {
+    SampleTheme { labels -> SampleContent(initial, loadFailed, backend, labels, onCredentialsChange) }
 }
 
 enum class SampleThemeMode(val label: String) { LIGHT("Light"), DARK("Dark"), BRAND("Brand") }
@@ -91,12 +96,19 @@ fun SampleTheme(content: @Composable ColumnScope.(StreamLabels) -> Unit) {
 }
 
 @Composable
-private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: Boolean, labels: StreamLabels, onCredentialsChange: (StreamCredentials) -> Unit) {
+private fun ColumnScope.SampleContent(
+    initial: StreamCredentials?,
+    loadFailed: Boolean,
+    backend: SampleBackend?,
+    labels: StreamLabels,
+    onCredentialsChange: (StreamCredentials) -> Unit,
+) {
     val context = LocalContext.current
     var url by remember { mutableStateOf(initial?.url ?: "") }
     var token by remember { mutableStateOf(initial?.token ?: "") }
     var target by remember { mutableStateOf(initial) }
-    var form by remember { mutableStateOf(initial == null) }
+    var helper by remember { mutableStateOf(backend) }
+    var form by remember { mutableStateOf(initial == null && backend == null) }
     var error by remember { mutableStateOf(if (loadFailed) "Cannot load credentials; check the JSON file" else "") }
     var generation by remember { mutableIntStateOf(0) }
     var showStats by remember { mutableStateOf(false) }
@@ -112,6 +124,7 @@ private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: B
                 else {
                     val entered = StreamCredentials(url, token)
                     target = entered
+                    helper = null
                     onCredentialsChange(entered)
                     generation++; form = false; error = ""
                 }
@@ -119,10 +132,17 @@ private fun ColumnScope.SampleContent(initial: StreamCredentials?, loadFailed: B
         }
     }
     val credentials = target
-    key(generation, credentials) {
-        if (credentials != null) {
+    val source = helper
+    key(generation, credentials, source) {
+        if (credentials != null || source != null) {
             val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-            val session = remember { DeviceStreamSession(context.applicationContext, { credentials }, scope) }
+            val session = remember {
+                DeviceStreamSession(
+                    context.applicationContext,
+                    { source?.credentials() ?: credentials },
+                    scope,
+                )
+            }
             DisposableEffect(session) {
                 session.start()
                 onDispose { session.close(); scope.cancel() }

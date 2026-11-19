@@ -21,6 +21,15 @@ class StreamReconnectControllerTest {
     )
 
     @Test
+    fun preparedAttemptCountsFailureWithoutWatchdog() {
+        controller.attemptMounted(startWatchdog = false)
+        assertEquals(0, clock.pendingTimers)
+        controller.handleFailure()
+        assertEquals(StreamReconnectSnapshot(StreamReconnectStatus.Reconnecting, 1), controller.snapshot)
+        assertEquals(1, heals)
+    }
+
+    @Test
     fun everyEntryPointDoesNothingAfterDispose() {
         controller.attemptMounted()
         controller.dispose()

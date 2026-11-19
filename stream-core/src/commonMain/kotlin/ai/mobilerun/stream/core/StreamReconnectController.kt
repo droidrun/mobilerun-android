@@ -110,8 +110,8 @@ public class StreamReconnectController(
     public val snapshot: StreamReconnectSnapshot
         get() = StreamReconnectSnapshot(status, attempt)
 
-    /** The stream connection (re)started; arms the connect watchdog. */
-    public fun attemptMounted() {
+    /** Prepares failure accounting; arm at socket allocation with [startWatchdog]. */
+    public fun attemptMounted(startWatchdog: Boolean = true) {
         if (disposed) return
         enabled = true
         // A mount during a backoff wait is stale: the scheduled attempt owns the next watchdog.
@@ -125,6 +125,7 @@ public class StreamReconnectController(
             status = StreamReconnectStatus.Connecting
             emit()
         }
+        if (!startWatchdog) return
         watchdogTimer = scheduler.schedule(ReconnectPolicy.CONNECT_TIMEOUT_MS) {
             watchdogTimer = null
             countFailure()

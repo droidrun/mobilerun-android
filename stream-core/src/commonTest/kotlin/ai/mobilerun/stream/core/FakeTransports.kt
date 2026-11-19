@@ -48,9 +48,9 @@ internal class FakeSocket(
 
     fun serverSends(text: String) = listener.onMessage(text)
 
-    fun serverCloses() {
+    fun serverCloses(code: Int? = null) {
         isOpen = false
-        listener.onClosed()
+        if (code == null) listener.onClosed() else listener.onClosed(code)
     }
 
     fun serverRejects(httpStatus: Int?) {

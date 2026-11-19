@@ -22,6 +22,18 @@ class SampleLaunchStateTest {
     private val application = RuntimeEnvironment.getApplication()
     private val file = File(application.filesDir, "stream-e2e.json")
 
+    @Test fun helperLaunchIsConsumedAndManualSelectionReplacesIt() {
+        file.writeText("""{"helperBaseUrl":"http://localhost:3001","deviceId":"device-a"}""")
+        val state = SampleLaunchState(application)
+        assertNull(state.credentials)
+        kotlin.test.assertNotNull(state.backend)
+        assertFalse(state.loadFailed)
+        assertFalse(file.exists())
+        state.updateCredentials(StreamCredentials("wss://stream.test/b", "legacy"))
+        assertNull(state.backend)
+        assertEquals("wss://stream.test/b", state.credentials?.url)
+    }
+
     @Test fun launchReadsAndDeletesCredentialsFile() {
         file.writeText("""{"streamUrl":"wss://example.test/stream","streamToken":"private-token"}""")
         val state = SampleLaunchState(application)

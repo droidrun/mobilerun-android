@@ -7,7 +7,8 @@ Kotlin library for Mobilerun device streaming, remote input and task approvals.
 Clone this repository and open it in Android Studio with JDK 17 and Android SDK 36.
 Inside this checkout, add `implementation(project(":stream-compose"))` to an app module.
 External apps can add the published artifact after the first release; until then, use this source checkout.
-Obtain short-lived stream credentials from your integrator backend; never put an API key in the app.
+Obtain a stream URL from your integrator backend and mint a fresh single-use key per socket;
+never put an API key in the app.
 Create and close a session with your screen's lifetime, then embed the default UI:
 
 ```kotlin
@@ -21,7 +22,35 @@ session.close()
 scope.cancel()
 ```
 
-`backend.streamCredentials()` returns `StreamCredentials(streamUrl, streamToken)` or null while not ready.
+`backend.streamCredentials()` discovers a target or returns null while not ready:
+
+```kotlin
+StreamCredentials(url = streamUrl, tokenProvider = { backend.mintStreamKey(deviceId) })
+```
+
+`StreamTokenProvider` is `suspend () -> String`. The callback belongs to that target and is called
+once immediately before **each** new signalling socket, including automatic retries, failed upgrades,
+wake and manual retries. Discovery is separate and retains its cycle-level polling semantics.
+A callback-only update does not restart healthy media; the next attempt uses the latest callback.
+A changed device should get a new session.
+
+The provider has an independent **10,000 ms** deadline. A provider exception (including its own
+cancellation), empty/blank output or timeout counts one attempt failure without opening a socket. There is no static/URL token fallback.
+Late results after stop, cancellation or target replacement open nothing. Nonblank keys retain their
+exact bytes. Provider mode requires `wss` and a parsed host, except `ws` to exact localhost,
+127.0.0.1 or IPv6 loopback. The **45 s** connect watchdog and **15 s** WebSocket-open / subsequent
+**15 s** RTC-configuration budgets start at socket allocation, after key acquisition. ICE-server
+refresh on an existing socket never calls the provider.
+
+Your backend calls `sdk.api.post('/identity/stream-keys', {body: {deviceId, ttlSeconds: 120},
+maxRetries: 0})` with `@mobilerun/sdk@6.2.1` and a base URL ending in `/v1`: the wire endpoint is
+`POST /v1/identity/stream-keys`. Return only `{key,keyId,expiresAt}` with 201 and `Cache-Control: no-store`.
+Keys are consumed at admission, even if the downstream upgrade fails; never cache or retry a mint
+request automatically. API keys stay on your authenticated, device-authorizing backend.
+
+The static `token` field/path is deprecated in documentation and retained for legacy diagnostics:
+`StreamCredentials(streamUrl, staticToken)` still works, including empty-token URL handling.
+A pasted single-use key cannot support reconnect. Credentials discovery itself is not deprecated.
 For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](TESTING.md).
 
 ## Status: pre-release
@@ -42,7 +71,9 @@ opt-in and may change in any release; they are excluded from the supported API. 
 subclass: `StreamNotConnectedException`, `StreamDisconnectedException`, `ScreenshotFailedException`
 or `ScreenshotTimeoutException`.
 
-`:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; all code lives in `commonMain`. `:stream-android` is an Android library (minSdk 24, compileSdk 36, JVM 17).
+`:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; shared code lives
+in `commonMain`, with JVM URL validation in `jvmMain`. `:stream-android` is an Android library
+(minSdk 24, compileSdk 36, JVM 17).
 
 ## Installation (after first release)
 
@@ -66,7 +97,9 @@ See [RELEASING.md](RELEASING.md) for artifact details and the release checklist.
 ```kotlin
 val session = DeviceStreamSession(
     context = applicationContext,
-    credentials = { StreamCredentials(url = streamUrl, token = streamToken) }, // null = not ready yet
+    credentials = {
+        StreamCredentials(url = streamUrl, tokenProvider = { backend.mintStreamKey(deviceId) })
+    }, // return null while not ready
     scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     config = StreamConfig(),            // audio muted, codec order VP9/H.265/H.264, H.264-only without an H.265 decoder
 )
@@ -82,7 +115,11 @@ session cannot restart.
 
 The video track and EGL context stay internal; `DeviceStreamView` uses them to render without copies.
 
-The credentials provider is called at start, once per reconnect cycle and when the server rejects the token (HTTP 401/403). Closing the signalling socket ends the session on the server, so a closed socket is treated like a failed peer connection: the whole connection is rebuilt with the reconnect policy's backoff. All sessions in a process share one libwebrtc factory, which lives until the process ends; `close()` releases a session's own peer connection, channels and tracks. Playout-delay hints are not available in the WebRTC Android API, so the jitter buffer keeps its adaptive default.
+Close **1001** immediately releases peer, channels, media, timers and pending screenshots, then
+reconnects with normal bounded backoff in both provider and static mode. Static mode reuses its token.
+Other closes keep the existing deferred release at remount.
+
+The credentials-discovery provider is called at start, once per reconnect cycle and when the server rejects the token (HTTP 401/403). Closing the signalling socket ends the session on the server, so a closed socket is treated like a failed peer connection: the whole connection is rebuilt with the reconnect policy's backoff. All sessions in a process share one libwebrtc factory, which lives until the process ends; `close()` releases a session's own peer connection, channels and tracks. Playout-delay hints are not available in the WebRTC Android API, so the jitter buffer keeps its adaptive default.
 
 ## Stream statistics and benchmark
 

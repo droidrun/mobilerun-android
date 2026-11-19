@@ -16,6 +16,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.CoroutineContext
 import kotlin.concurrent.Volatile
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
@@ -54,13 +57,15 @@ internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
  * The reference client lets the peer connection decide when the signalling socket dies while media
  * still flows. The bridge ends the session when the socket closes, so here the end of the socket,
  * before or after it opened, always counts as a connection failure and rebuilds the whole
- * connection; the attempt whose socket ended cannot report itself connected afterwards.
+ * connection; the attempt whose socket ended cannot report itself connected afterwards. Code 1001
+ * releases resources immediately; other closes keep the existing release at remount.
  *
  * ## Credentials
- * The provider is called at [start], once per reconnect cycle (the reconnect controller's heal),
+ * The credentials-discovery provider is called at [start], once per reconnect cycle (the controller's heal),
  * and when the server rejects the token (HTTP 401 or 403 on the upgrade). A token-only change
  * while connected is held for the next mount. A URL change, or a change while not connected,
- * reconnects now unless backoff or unavailable recovery holds it for the next attempt.
+ * reconnects now unless backoff or unavailable recovery holds it for the next attempt. The target's
+ * [StreamCredentials.tokenProvider] is separate: it supplies a new key before each socket.
  *
  * @param scope scope whose dispatcher runs the engine and whose cancellation closes it.
  * @param credentials where the stream is and how to open it.
@@ -225,7 +230,7 @@ public class StreamSessionEngine(
         activeTarget = target
         val next = Connection(target)
         connection = next
-        controller.attemptMounted()
+        controller.attemptMounted(startWatchdog = false)
         next.start()
     }
 
@@ -306,6 +311,7 @@ public class StreamSessionEngine(
         // The attempt failed (startup, socket end, negotiation, peer failed or closed): nothing it
         // reports afterwards may cancel the rebuild the failure scheduled.
         private var failed = false
+        private var providerJob: Deferred<String>? = null
         private var handshakeTimer: Job? = null
         private var restartRecheck: Job? = null
 
@@ -326,9 +332,45 @@ public class StreamSessionEngine(
         private val isCurrent: Boolean get() = !released && !closed && connection === this
 
         fun start() {
+            val provider = target.tokenProvider
+            if (provider == null) {
+                openSocket(target)
+                return
+            }
+            if (!isSecureProviderEndpoint(target.url)) {
+                fail(releaseImmediately = true)
+                return
+            }
+            val pending = startTokenProvider(scope.coroutineContext, provider)
+            providerJob = pending
+            scope.launchGuarded {
+                val key = try {
+                    withTimeout(ReconnectPolicy.TOKEN_PROVIDER_TIMEOUT_MS) { pending.await() }
+                } catch (_: Exception) {
+                    // Includes a provider's own cancellation; a cancelled attempt is already stale.
+                    fail(releaseImmediately = true)
+                    return@launchGuarded
+                }
+                providerJob = null
+                if (!isCurrent) return@launchGuarded
+                if (key.isBlank()) {
+                    fail(releaseImmediately = true)
+                    return@launchGuarded
+                }
+                openSocket(StreamCredentials(target.url, key))
+            }
+        }
+
+        private fun openSocket(resolved: StreamCredentials) {
+            if (!isCurrent) return
+            controller.attemptMounted()
             try {
-                val opened = signalling.open(target, this)
-                if (isCurrent) ws = opened else opened.close()
+                val opened = signalling.open(resolved, this)
+                if (!isCurrent) {
+                    opened.close()
+                    return
+                }
+                ws = opened
             } catch (e: Exception) {
                 log("signalling open failed: ${e::class.simpleName}")
                 fail()
@@ -339,7 +381,7 @@ public class StreamSessionEngine(
                 log("websocket open timeout")
                 fail()
             }
-            // Armed at mount, not at open: ticks before the socket is open are skipped.
+            // Armed at socket allocation: ticks before the socket is open are skipped.
             scope.launchGuarded {
                 while (true) {
                     delay(SignallingTiming.KEEP_ALIVE_INTERVAL_MS)
@@ -353,12 +395,17 @@ public class StreamSessionEngine(
             released = true
             wsOpen = false
             controlOpen = false
+            providerJob?.cancel()
+            providerJob = null
             scope.cancel()
             val pending = screenshots.values.toList()
             screenshots.clear()
             pending.forEach { it.completeExceptionally(StreamDisconnectedException()) }
             runCatching { ws?.close() }
             runCatching { peer?.close() }
+            ws = null
+            peer = null
+            pendingCandidates.clear()
         }
 
         fun send(message: ClientMessage): Boolean = ws?.send(message.toJson()) ?: false
@@ -373,10 +420,11 @@ public class StreamSessionEngine(
         fun sendHover(bytes: ByteArray): Boolean = !released && peer?.sendHover(bytes) == true
 
         // A failure of this attempt: the reconnect controller decides what happens next.
-        private fun fail() {
+        private fun fail(releaseImmediately: Boolean = false) {
             if (!isCurrent || failed) return
             failed = true
             handshakeTimer?.cancel()
+            if (releaseImmediately) releaseConnection()
             controller.handleFailure()
         }
 
@@ -398,11 +446,13 @@ public class StreamSessionEngine(
             }
         }
 
-        override fun onClosed() = post {
+        override fun onClosed(): Unit = onClosed(0)
+
+        override fun onClosed(code: Int) = post {
             wsOpen = false
             if (failed) return@post
             log("websocket closed")
-            fail()
+            fail(releaseImmediately = code == GOING_AWAY)
         }
 
         override fun onFailure(httpStatus: Int?) = post {
@@ -621,6 +671,7 @@ public class StreamSessionEngine(
     }
 
     private companion object {
+        const val GOING_AWAY = 1001
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
     }
@@ -643,3 +694,8 @@ private fun monotonicMillis(): () -> Long {
     val origin = TimeSource.Monotonic.markNow()
     return { origin.elapsedNow().inWholeMilliseconds }
 }
+
+// Detached only from completion: release cancels this handle but never joins a non-cooperative callback.
+// This closure captures the provider alone, so a late callback cannot retain the Connection/engine.
+private fun startTokenProvider(context: CoroutineContext, provider: StreamTokenProvider): Deferred<String> =
+    CoroutineScope(context.minusKey(Job)).async { provider() }

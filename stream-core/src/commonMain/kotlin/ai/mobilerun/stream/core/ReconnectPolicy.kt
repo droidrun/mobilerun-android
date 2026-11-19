@@ -21,6 +21,9 @@ public object ReconnectPolicy {
     @InternalStreamApi
     public const val CONNECT_TIMEOUT_MS: Long = 45_000
 
+    /** Independent deadline for a per-socket key, before the connect watchdog starts. */
+    internal const val TOKEN_PROVIDER_TIMEOUT_MS: Long = 10_000
+
     /** Holding a connection this long refills the retry budget and re-arms the credential refresh. */
     @InternalStreamApi
     public const val STABILITY_MS: Long = 30_000

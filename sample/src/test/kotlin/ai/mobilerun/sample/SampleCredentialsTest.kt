@@ -14,6 +14,22 @@ import kotlin.test.assertFailsWith
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class SampleCredentialsTest {
+    @Test fun acceptsCredentialFreeHelperConfigAndRejectsInsecureRemoteHelper() {
+        val config = parseLaunchConfig(
+            """{"helperBaseUrl":"http://localhost:3001","deviceId":"device-a"}""",
+        )
+        assertEquals(null, config.credentials)
+        kotlin.test.assertNotNull(config.backend)
+        val invalid = listOf(
+            """{"helperBaseUrl":"http://example.test:3001","deviceId":"device-a"}""",
+            """{"helperBaseUrl":"http://localhost.evil:3001","deviceId":"device-a"}""",
+            """{"helperBaseUrl":"http://localhost:3001?token=private","deviceId":"device-a"}""",
+            """{"helperBaseUrl":"http://localhost:3001","deviceId":"../device-b"}""",
+            """{"helperBaseUrl":"http://localhost:3001"}""",
+        )
+        invalid.forEach { assertFailsWith<IllegalArgumentException> { parseLaunchConfig(it) } }
+    }
+
     @Test fun loadsTheE2eFormatAndRedactsLogging() {
         val credentials = parseCredentials("""{"streamUrl":"wss://example.test/stream", "streamToken":"private-token"}""")
         assertEquals("wss://example.test/stream", credentials.url)
