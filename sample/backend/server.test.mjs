@@ -4,6 +4,10 @@ import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import { request } from 'node:http';
 import { json } from 'node:stream/consumers';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 test('importing the helper does not listen', () => {
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
@@ -13,6 +17,24 @@ test('importing the helper does not listen', () => {
     await import('./server.mjs');
   `], { cwd: new URL('.', import.meta.url), timeout: 5_000 });
   assert.equal(result.status, 0, result.stderr.toString());
+});
+
+test('starting the helper through a symlink listens on loopback', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'sample-helper-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const entry = join(directory, 'helper.mjs');
+  symlinkSync(fileURLToPath(new URL('./server.mjs', import.meta.url)), entry);
+  const preload = `
+    import { Server } from 'node:http';
+    Server.prototype.listen = (port, host) => {
+      process.stdout.write(JSON.stringify({ port, host }));
+    };
+  `;
+  const result = spawnSync(process.execPath, [
+    '--import', `data:text/javascript,${encodeURIComponent(preload)}`, entry,
+  ], { env: { ...process.env, MOBILERUN_API_KEY: 'test-only' }, timeout: 5_000 });
+  assert.equal(result.status, 0, result.stderr.toString());
+  assert.deepEqual(JSON.parse(result.stdout.toString()), { port: 3001, host: '127.0.0.1' });
 });
 
 async function fixture(t, sdk) {
