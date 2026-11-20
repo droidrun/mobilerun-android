@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Mobilerun
+# SPDX-License-Identifier: Apache-2.0
+
 # Maintainer step: refresh conformance/fixtures from a pinned tag of the shared conformance
 # repository, then regenerate the constants from the new copy.
 #

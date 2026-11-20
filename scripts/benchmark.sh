@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Mobilerun
+# SPDX-License-Identifier: Apache-2.0
+
 # Uses an existing emulator, or starts BENCHMARK_AVD. Requires Gradle and the Android SDK.
 # The caller supplies runtime credentials and an output directory outside the repository.
 set -euo pipefail

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Mobilerun
+# SPDX-License-Identifier: Apache-2.0
+
 # Build and run the interactive sample; credentials travel only over stdin.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"

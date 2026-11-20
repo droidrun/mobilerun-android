@@ -1,409 +1,131 @@
-# mobilerun-android
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/mobilerun-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/mobilerun.png" />
+    <img src="assets/mobilerun.png" alt="Mobilerun" height="44" />
+  </picture>
+</p>
 
-Kotlin library for Mobilerun device streaming, remote input and task approvals.
+<h1 align="center">mobilerun-android</h1>
 
-## Quick start (from source)
+<p align="center">
+  <strong>Kotlin library for embedding Mobilerun device streams in Android apps.</strong><br />
+  Live WebRTC video, remote input and task approvals, with optional Compose UI.
+</p>
 
-Clone this repository and open it in Android Studio with JDK 17 and Android SDK 36.
-Inside this checkout, add `implementation(project(":stream-compose"))` to an app module.
-External apps can add the published artifact after the first release; until then, use this source checkout.
-Obtain a stream URL from your integrator backend and mint a fresh single-use key per socket;
-never put an API key in the app.
-Create and close a session with your screen's lifetime, then embed the default UI:
+<div align="center">
 
-```kotlin
-val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-val session = DeviceStreamSession(context, credentials = { backend.streamCredentials() }, scope = scope)
-session.start()
-// Inside your composable:
-StreamTheme { DeviceStream(session, Modifier.fillMaxSize()) }
-// When the screen is disposed:
-session.close()
-scope.cancel()
-```
+<a href="https://docs.mobilerun.ai/partners">🤝 Partner guide</a>
+·
+<a href="https://docs.mobilerun.ai">📕 Documentation</a>
+·
+<a href="https://cloud.mobilerun.ai">☁️ Mobilerun Cloud</a>
 
-`backend.streamCredentials()` discovers a target or returns null while not ready:
+[![Status](https://img.shields.io/badge/status-pre--release-grey.svg)](#install)
+[![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84.svg)](#install)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Discord](https://img.shields.io/discord/1360219330318696488?color=white&label=Discord&logo=discord&logoColor=white)](https://discord.gg/ZZbKEZZkwK)
 
-```kotlin
-StreamCredentials(url = streamUrl, tokenProvider = { backend.mintStreamKey(deviceId) })
-```
+[React](https://github.com/droidrun/mobilerun-react) · **Android** · [iOS](https://github.com/droidrun/mobilerun-swift) · [Flutter](https://github.com/droidrun/mobilerun-flutter)
 
-`StreamTokenProvider` is `suspend () -> String`. The callback belongs to that target and is called
-once immediately before **each** new signalling socket, including automatic retries, failed upgrades,
-wake and manual retries. Discovery is separate and retains its cycle-level polling semantics.
-A callback-only update does not restart healthy media; the next attempt uses the latest callback.
-A changed device should get a new session.
+</div>
 
-The provider has an independent **10,000 ms** deadline. A provider exception (including its own
-cancellation), empty/blank output or timeout counts one attempt failure without opening a socket. There is no static/URL token fallback.
-Late results after stop, cancellation or target replacement open nothing. Nonblank keys retain their
-exact bytes. Provider mode requires `wss` and a parsed host, except `ws` to exact localhost,
-127.0.0.1 or IPv6 loopback. The **45 s** connect watchdog and **15 s** WebSocket-open / subsequent
-**15 s** RTC-configuration budgets start at socket allocation, after key acquisition. ICE-server
-refresh on an existing socket never calls the provider.
+> **Building Mobilerun phones into your platform?** Start with the [Partner guide](https://docs.mobilerun.ai/partners). It walks through the API key, one phone per user, stream keys and live viewing step by step.
 
-Your backend calls `sdk.api.post('/identity/stream-keys', {body: {deviceId, ttlSeconds: 120},
-maxRetries: 0})` with `@mobilerun/sdk@6.2.1` and a base URL ending in `/v1`: the wire endpoint is
-`POST /v1/identity/stream-keys`. Return only `{key,keyId,expiresAt}` with 201 and `Cache-Control: no-store`.
-Keys are consumed at admission, even if the downstream upgrade fails; never cache or retry a mint
-request automatically. API keys stay on your authenticated, device-authorizing backend.
+<table>
+<tr>
+<td width="280" align="center">
+<img src="assets/preview.png" alt="Live device video with Android navigation controls" width="260" />
+</td>
+<td>
+<strong>In this package</strong>
+<ul>
+<li><code>DeviceStreamSession</code> — connection, recovery and stream state.</li>
+<li><code>StreamCredentials</code> — target URL and per-connection token provider.</li>
+<li><code>DeviceStreamView</code> — interactive video for View hosts.</li>
+<li><code>DeviceStream</code> — Compose video and default navigation.</li>
+<li><code>StreamTheme</code> — colors, typography and white-label tokens.</li>
+<li><code>TaskApprovalController</code> — approval polling and decisions.</li>
+<li><code>TaskApproval</code> — Compose approval card.</li>
+</ul>
+<strong>Requirements</strong>
+<ul>
+<li>Android 7.0+ (API 24); Android SDK 36 to build.</li>
+<li>JDK 17 and Kotlin 2.4.21.</li>
+<li>A Mobilerun API key on your server.</li>
+</ul>
+</td>
+</tr>
+</table>
 
-The static `token` field/path is deprecated in documentation and retained for legacy diagnostics:
-`StreamCredentials(streamUrl, staticToken)` still works, including empty-token URL handling.
-A pasted single-use key cannot support reconnect. Credentials discovery itself is not deprecated.
-For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](TESTING.md).
-The sample helper only answers loopback Host headers on its listening port and requests without Origin.
+## Install
 
-## Status: pre-release
-
-The headless core, Android connection layer and interactive video view exist. The optional default UI, approval controller and white-label theme exist; nothing is published.
-
-| Module | Package | Contents |
-|---|---|---|
-| `:protocol` | `ai.mobilerun.stream.protocol` | protocol constants, binary control-message encoders, signalling message types and parser |
-| `:stream-core` | `ai.mobilerun.stream.core` | session engine and transports, reconnect policy, input routing, approval controller and readiness polling |
-| `:stream-android` | `ai.mobilerun.stream.android` | `DeviceStreamSession` and interactive `DeviceStreamView` |
-| `:stream-compose` | `ai.mobilerun.stream.compose` | optional default UI, tokens, labels, navigation and approval card |
-
-Protocol types, raw channel sends and reconnect implementation types require `InternalStreamApi`
-opt-in and may change in any release; they are excluded from the supported API. Only
-`ReconnectPolicy.MAX_ATTEMPTS` is public reconnect configuration. `StreamConfig` contains `muted`
-(default `true`) and `videoCodec` (`Auto` or `H264Only`). Stream operations throw a `StreamException`
-subclass: `StreamNotConnectedException`, `StreamDisconnectedException`, `ScreenshotFailedException`
-or `ScreenshotTimeoutException`.
-
-`:protocol` and `:stream-core` are Kotlin Multiplatform modules with a JVM target; shared code lives
-in `commonMain`, with JVM URL validation in `jvmMain`. `:stream-android` is an Android library
-(minSdk 24, compileSdk 36, JVM 17).
-
-## Installation (after first release)
-
-These coordinates are reserved for the first Maven Central release; they are not available yet.
-With `mavenCentral()` configured, use:
+The SDK is not published yet; use the source checkout today.
+Clone this repository and open it in Android Studio, then add to an app module inside this checkout:
 
 ```kotlin
 dependencies {
-    implementation("ai.mobilerun:mobilerun-stream-android:0.1.0")
-    // Optional Compose UI; includes the Android streaming module transitively.
-    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+    implementation(project(":stream-compose"))
 }
 ```
 
-Android requires minSdk 24 and JDK 17. For headless JVM use, choose
-`ai.mobilerun:mobilerun-stream-core:0.1.0`; Gradle selects its JVM variant.
-See [RELEASING.md](RELEASING.md) for artifact details and the release checklist.
+For a View host, use `project(":stream-android")` instead.
+See [package and planned artifacts](docs/package.md) for module details and future Maven coordinates.
 
-## Streaming a device
+## Quick start
+
+1. Your server mints a short-lived stream key for one device with your API key
+   (`POST /v1/identity/stream-keys`). Follow the [Partner guide](https://docs.mobilerun.ai/partners).
+2. Your app's `tokenProvider` asks your server for a key before each connection.
+3. The SDK opens the stream with that key, one key per connection, and reconnects with a fresh one.
+
+On your server, use `@mobilerun/sdk@6.2.1` with a base URL ending in `/v1`.
+Adapt the [local example helper](sample/backend/server.mjs) to your authenticated backend:
+
+```js
+// Authenticate your user and check they own the device before minting.
+const result = await sdk.api.post('/identity/stream-keys', {
+  body: { deviceId, ttlSeconds: 120 },
+  maxRetries: 0,
+});
+res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+res.end(JSON.stringify({ key: result.key, keyId: result.keyId, expiresAt: result.expiresAt }));
+```
+
+In your app, `backend` below is your own client for that server:
 
 ```kotlin
-val session = DeviceStreamSession(
-    context = applicationContext,
-    credentials = {
-        StreamCredentials(url = streamUrl, tokenProvider = { backend.mintStreamKey(deviceId) })
-    }, // return null while not ready
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    config = StreamConfig(),            // audio muted, codec order VP9/H.265/H.264, H.264-only without an H.265 decoder
-)
+val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+val session = DeviceStreamSession(context, credentials = {
+    StreamCredentials(url = streamUrl, tokenProvider = { backend.mintStreamKey(deviceId) })
+}, scope = scope)
 session.start()
-session.status       // StateFlow<StreamStatus>: Connecting, Connected, Reconnecting(attempt), Unavailable
-session.videoSize    // StateFlow<VideoSize?>, including rotation
-session.stats        // StateFlow<StreamStats?>, one-second inbound video samples
-session.close()                     // or cancel the scope: both release everything
+// Inside your composable:
+StreamTheme { DeviceStream(session, Modifier.fillMaxSize()) }
+// On screen disposal:
+session.close(); scope.cancel()
 ```
 
-After `close()` or scope cancellation, status stops updating and controls are disabled. A closed
-session cannot restart.
+Never ship an API key in the app. Never cache keys or automatically retry mint requests.
+For the runnable sample, see [TESTING.md](TESTING.md).
 
-The video track and EGL context stay internal; `DeviceStreamView` uses them to render without copies.
+## Guides
 
-Close **1001** immediately releases peer, channels, media, timers and pending screenshots, then
-reconnects with normal bounded backoff in both provider and static mode. Static mode reuses its token.
-Other closes keep the existing deferred release at remount.
+| Guide | Covers |
+|---|---|
+| [Stream keys](docs/stream-keys.md) | Token provider, deadlines, secure URLs and legacy credentials |
+| [Package](docs/package.md) | Modules, supported API, configuration and planned Maven artifacts |
+| [Video and input](docs/video-and-input.md) | View and Compose hosts, touch, keyboard, IME and navigation |
+| [Default UI](docs/default-ui.md) | Chrome, labels, themes and white-label slots |
+| [Task approvals](docs/task-approvals.md) | Backend callbacks, polling, decisions and approval cards |
+| [Lifecycle](docs/lifecycle.md) | Session ownership, visibility, network recovery and credentials |
+| [Statistics](docs/stats.md) | Stream stats, benchmark and hardening checks |
 
-The credentials-discovery provider is called at start, once per reconnect cycle and when the server rejects the token (HTTP 401/403). Closing the signalling socket ends the session on the server, so a closed socket is treated like a failed peer connection: the whole connection is rebuilt with the reconnect policy's backoff. All sessions in a process share one libwebrtc factory, which lives until the process ends; `close()` releases a session's own peer connection, channels and tracks. Playout-delay hints are not available in the WebRTC Android API, so the jitter buffer keeps its adaptive default.
+## Contributing
 
-## Stream statistics and benchmark
-
-`session.stats` exposes `ai.mobilerun.stream.core.StreamStats`. It is read-only and `null` while disconnected or after close. Collect it like the
-status flow. While the host is visible and at least one collector observes it, every connected second it reports inbound video fps, decoded dimensions, codec MIME
-type, payload bitrate in kbit/s, selected-pair RTT in ms, jitter-buffer delay per emitted frame,
-packet loss, dropped frames, freezes, decode time per frame, local/remote ICE candidate types, and
-time from the connection attempt to its first decoded frame. Missing platform fields remain null.
-Bitrate and per-frame durations need two reports; each new attempt or sampling resume resets the counter baseline. Hidden, unobserved and non-connected sessions expose null and do not sample.
-RTT uses the transport's selected candidate pair, rather than an arbitrary nominated pair.
-
-The instrumentation-only benchmark opens five connections and takes ten input-latency samples per
-connection. Supply a running emulator (`ANDROID_SERIAL`) or `BENCHMARK_AVD`, plus runtime credentials
-and an output directory outside the repository:
-
-```sh
-STREAM_E2E_CREDENTIALS="$RUNTIME_CREDENTIALS" STREAM_BENCHMARK_OUT="$BENCHMARK_OUTPUT" \
-  TAP_X=200 TAP_Y=600 scripts/benchmark.sh
-```
-
-`TAP_X/Y` are upright video pixels selecting an existing harmless launcher app icon. Each sample
-returns Home, waits for four stable frames, then taps it. A quarter-scale renderer callback compares
-4×4 pixel tiles with the baseline. The tap-response region is 64×64 upright-video pixels centered on
-the tap; the first tile whose mean absolute luma difference reaches 4/255 ends input-to-pixel timing.
-The separate app-launch metric observes the central picture (20–80% width, 20–60% height), away from
-the dock icon. These are an app-launch stimulus's local response and central transition respectively,
-not physical display scanout or an isolated network transit measurement. Ten steady-state stats
-samples per connection are distinct flow emissions. Failed stability/change checks fail the benchmark.
-`BENCHMARK_RUNS` and `BENCHMARK_SAMPLES` override the five-connection/ten-input defaults. Results include
-both raw sample sets and separately labelled median/p90 columns. Credentials are copied only to the
-test app's private storage at runtime and removed afterward. Sanitized native reports are a separate,
-opt-in `NativeStatsCaptureTest` using the same instrumentation runner.
-
-The separate `StreamHardeningTest` uses the same runner and credentials. It exercises host visibility,
-network loss/restoration, a ten-minute soak (PSS growth bounded by the larger of 32 MiB or 25% of the
-warmed baseline), native-peer teardown and session collection. Run it with
-`STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.StreamHardeningTest scripts/run-e2e.sh stream-android`.
-It restores emulator networking even after failure. A rejected initial device login is reported as `Device unavailable:`; it is not a successful
-benchmark or soak result.
-
-## Video and input
-
-```kotlin
-val streamView = DeviceStreamView(context).apply {
-    attach(session)
-    hasControl = true
-}
-container.addView(streamView, ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-session.start()
-
-streamView.hideKeyboard()
-streamView.sendSystemKey(SystemKey.Back) // also Home and Recent
-// Tapping the video focuses it; show the soft keyboard explicitly:
-streamView.showKeyboard()
-
-// When this host is finished:
-streamView.detach()          // does not close the session
-session.close()
-```
-
-Use view methods on the main thread. Video fits within the view, preserving its aspect ratio and
-rotation; letterbox areas and a view without video remain transparent. Removing the view from its
-window releases its renderer; adding it again resumes rendering the attached session. Repeated
-`attach` with the same session does nothing. The app owns the session's lifetime.
-
-Compose uses the same view and input paths. Add `:stream-compose` and import
-`ai.mobilerun.stream.compose.DeviceStream`; `:stream-android` has no Compose dependency:
-
-```kotlin
-DeviceStream(session = session, modifier = Modifier.fillMaxSize(), hasControl = true)
-```
-
-`hasControl = false` renders without sending input. It is a display-only switch, not a permission
-check; the server decides access. Touch uses stable slots for up to ten fingers, coalesces movement
-per frame and releases at the last position inside the video. Mouse drags use pointer -1; hover
-uses only the hover channel. Wheel axes use Android's tick units, without the browser pixel scaling.
-Hardware printable single-grapheme keys inject text; Enter, NumpadEnter, Tab, navigation, modifier and Ctrl/Command combinations inject
-Android keycodes with React's Shift/Alt/Ctrl/Meta flags only; CapsLock XORs Shift for letters. Ctrl/Command+V pastes the local primary clipboard;
-Ctrl/Command+M presses Menu. Single graphemes, including emoji and combining sequences, inject their produced text without normalization.
-Keycode DOWNs track physical identity; only matched keyups send UP, using current modifiers. Text
-and completed paste/menu shortcuts never produce orphan releases.
-The IME requests per-character Latin input with the no-suggestions flag and the no-personalized-learning hint on Android 8+. CJK IMEs may still compose. Composition
-stays local until `commitText` or `finishComposingText`; Backspace and editor actions send device keys. Committed CRLF (as one Enter), CR, LF and horizontal tabs become ENTER/TAB; other
-committed control characters are dropped. Printable IME runs use INJECT_TEXT for every client. The local input buffer does not mirror the remote editor,
-so remote selection, autocorrection and surrounding text are not exposed to the local IME.
-Some emoji and CJK characters may not arrive on Cloud Android devices through text injection.
-
-The host's Back button or gesture is **never forwarded automatically**. Apps may opt in from their
-own Back handler, for example with AndroidX Activity's `OnBackPressedDispatcher`:
-
-```kotlin
-onBackPressedDispatcher.addCallback(this) {
-    streamView.sendSystemKey(SystemKey.Back)
-}
-```
-
-Decide in that handler when to navigate locally instead. `SystemKey.Home` and `SystemKey.Recent` are also
-explicit actions. The Compose module supplies optional navigation chrome.
-
-## Default UI and white-labeling
-
-The optional `:stream-compose` module uses Compose foundation only. It does not read Material 3
-colors or typography, show a logo, or put a product name in the UI. `DeviceStream` adds a bottom-left
-status pill while connecting/reconnecting, an unavailable message with Retry, and a navigation bar
-below the video. Retry calls the same session recovery path as a custom UI. Reconnecting labels take
-precedence over `labels.connecting`; connected video remains visible with `hasControl = false`, which
-also disables the navigation buttons. The standalone `StreamNavigationBar(onAction)` emits `SystemKey`
-BACK/HOME/RECENT (4/3/187). `StreamStatusPill(label)` is reusable independently.
-
-```kotlin
-StreamTheme { // light by default; opt in with followSystem = true
-    DeviceStream(
-        session = session,
-        modifier = Modifier.fillMaxSize(),
-        labels = StreamLabels(connecting = "Preparing", retry = "Try again"),
-        navigationBar = {}, // omit, or provide { state -> ... }
-        // placeholder = { status, labels -> YourPlaceholder(status, labels) },
-        // unavailable = { retry, labels -> YourUnavailable(retry, labels) },
-    )
-}
-```
-
-`StreamLabels` overrides every stream string, including accessible navigation names. `TaskApprovalLabels`
-has the same twelve keys as React: `paymentCardTitle`, `waiting`, `card`, `app`, `domain`, `timeLeft`,
-`expired`, `approve`, `deny`, `viewSwitch`, `details`, `device`. Defaults are English; `{time}` in
-`timeLeft` and `{attempt}`/`{max}` in `StreamLabels.reconnectingAttempt` are replaceable placeholders.
-Backend-provided fact values and error messages remain the integrator's responsibility to localize.
-
-Override individual theme tokens via `copy`, without modifying the rest:
-
-```kotlin
-val tokens = StreamThemeTokens.dark().copy(
-    primary = Color(0xFF2563EB),
-    primaryForeground = Color.White,
-    radius = 12.dp,
-    typography = StreamTypography(body = TextStyle(fontSize = 16.sp)),
-)
-StreamTheme(tokens) { DeviceStream(session, Modifier.fillMaxSize()) }
-```
-
-All thirteen React semantic colors are exposed: background, foreground, card, cardForeground,
-muted, mutedForeground, border, ring, primary, primaryForeground, accent, accentForeground,
-destructive, plus radius and body/caption/title typography. The ring, accent and accentForeground
-tokens are reserved for focus/accent styling in custom slots; defaults do not currently read them. Slots can read `StreamTheme.tokens`. Light is the default even when the system is dark; use
-`StreamTheme(tokens = StreamThemeTokens.dark())` or `StreamTheme(followSystem = true)` to opt in.
-The defaults are React's `styles.css` values converted once: OKLCH → OKLab → linear sRGB using
-CSS Color 4 matrices, apply the sRGB transfer function, clip each channel to [0, 1], round to 8 bits.
-Light neutrals are #FFFFFF/#0A0A0A/#F5F5F5/#737373/#E5E5E5/#A1A1A1/#171717/#FAFAFA;
-destructive is #E7000B. Dark adds #262626 and destructive #FF6467; its border retains 10% white.
-Native dp/sp replace CSS px; the base radius is 8 dp; buttons use radius × 0.75 (6 dp), cards radius + 4 (12 dp) and text is 12/14/16 sp. Native buttons use
-48 dp touch targets. Each property is independently replaceable.
-
-The plain `DeviceStreamView` remains the View API for custom hosts. Navigation, pill, approval card,
-and default overlays are Compose-only. A View host can embed them in `ComposeView` or build its own
-chrome on the headless core.
-
-## Task approvals
-
-The app talks to **your backend**. Never ship an API key in an app. The backend returns a
-`PendingApproval(approvalId, kind, details, expiresAt, deviceId)` and accepts an `ApprovalDecision`
-(`decision.value` is the lowercase backend value, `approve` or `deny`).
-Unknown kinds or invalid payment details show the generic heading and keep the actions available.
-
-```kotlin
-val controller = TaskApprovalController(
-    scope = scope,
-    fetchApproval = { taskId -> backend.pendingApproval(taskId) },
-    decide = { taskId, approvalId, decision -> backend.decide(taskId, approvalId, decision.value) },
-    // subscribe = { taskId, changed -> backend.subscribe(taskId, changed) }, // returns AutoCloseable
-)
-controller.setTask(taskId)
-// In Compose:
-val state by controller.state.collectAsState()
-TaskApproval(
-    approval = state.approval,
-    onDecide = controller::decide,
-    isPending = state.isDeciding,
-    decision = state.decision,
-    error = state.error?.message,
-    labels = TaskApprovalLabels(approve = "Allow", deny = "Reject"),
-    // device = { DeviceStream(session, Modifier.fillMaxSize()) },
-    // actions = { state -> YourApprovalActions(state.onDecide, state.isPending, state.decision) },
-)
-// On host disposal:
-controller.close() // scope cancellation also cleans up
-```
-
-The controller loads immediately and polls every 3 seconds after the latest completed fetch. A
-successful subscription turns polling off. If subscribing fails, the error is reported through
-`onError` and `state.error` until the next successful fetch, and polling resumes every 3 seconds. Push notifications only refetch. Overlapping/old-task results are dropped. `refetch()` does
-not re-subscribe. Decisions are deduplicated, and every success/error triggers a refetch, including
-404/409. A decision error survives successful fetches until the next decision or task change; a fetch
-error clears after a successful fetch. `setTask(null)` clears state and stops work. Integrator timeouts/cancellation are errors, while
-closing the controller cancels its work. Subscription, unsubscribe and error-handler failures cannot
-crash the host.
-
-`PendingApproval.paymentCardDetails()` validates only payment-card kinds.
-`paymentCardDetails()` accepts a nonempty label (falling back to credentialName), targetPackage
-and optional targetHost, ignoring wrongly typed optional fields. The card's isolated one-second
-countdown stops ticking at expiry and is display only: **the backend
-decides expiry and permission**. Expired approvals still forward decisions. The optional device slot
-appears beside details on wide layouts; narrow layouts switch Details/Device while retaining the
-slot's composition, including when resizing across the 768 dp breakpoint. The approval actions are independently replaceable.
-
-## Visibility, network recovery and credentials
-
-`DeviceStream` installs `StreamLifecycle` automatically. App background pauses keep-alive sends;
-a real background-to-foreground or network-lost-to-available transition calls `session.handleWake()`, which retries pending backoff
-immediately or starts a fresh recovery cycle from unavailable. It never starts a session that has
-not been started, or revives a closed session. The host still owns start/close. For custom View UI,
-create `StreamLifecycle(context, session)` on the main thread and close it on disposal. To manage
-visibility yourself set `observeLifecycle = false`, then call `setVisible` and `handleWake`.
-Registration's replayed ON_START and first network availability are ignored. Use one lifecycle adapter
-per session.
-
-The engine is the only credentials poll owner. Pass the integrator's backend callback directly:
-
-```kotlin
-val session = DeviceStreamSession(context, { backend.streamCredentials() }, scope)
-session.start()
-```
-
-The callback returns `StreamCredentials?`; null means not ready. The engine polls every 3 seconds,
-including after fetch failures, and refetches on recovery/heal. Each provider call is bounded by the reconnect connect timeout (45 seconds); a hung suspending call cannot
-block wake/retry work, and a timed-out initial call is polled again. Cancellation stops polling. No API
-key belongs in the app: stream tokens are short-lived backend-issued values.
-A token-only change while connected is stored for the next connection. A URL change, or a change
-while negotiating, remounts immediately; changes during backoff wait for the scheduled attempt.
-An empty token preserves the URL query, and credential string descriptions redact both fields.
-
-All overlay slots have a `BoxScope` receiver for placement and receive one
-`StreamOverlayState` (status, labels, retry). The navigation slot receives one
-`StreamNavigationState` (canControl, labels, onAction); the approval action slot receives one
-`ApprovalActionsState` (isPending, decision, labels, onDecide). Slots have non-null defaults, and an
-empty navigation lambda removes the bar. The default empty device slot omits device layout. Public
-value types are plain classes; theme and label types expose explicit `copy` methods.
-
-## End-to-end check
-
-`scripts/run-e2e.sh stream-android` runs an instrumented test against a live cloud device on an emulator: first frame, a tap sent as raw control bytes, a forced socket close with full rebuild, and a mid-session configuration refresh. Credentials come from a JSON file (`streamUrl`, `streamToken`) named by `STREAM_E2E_CREDENTIALS` and are copied into the test app's private storage at run time, never into the repository or the APK.
-
-For the interactive view scenario, set `STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.android.DeviceStreamViewE2eTest`.
-Supply `TAP_X`/`TAP_Y` for an app icon and `TEXT_X`/`TEXT_Y` for its text field, in upright
-video pixels. Set `OPEN_URL` to a long document that supports scrolling and pinch zoom. Two scenarios
-assert touch, swipe, wheel, two-finger zoom and landscape mapping, then IME commits, hardware keys,
-clipboard paste, Backspace, Enter, BACK/HOME and display-only suppression. Comparisons use decoded
-content or text-field crops that exclude the status bar. `STREAM_E2E_OUT` receives remote and
-local-renderer screenshots and logs. Runtime target selection belongs outside the test.
-
-
-Input routing follows the shared conformance vectors v0.2.0. The protocol and recovery contract is enforced with the shared conformance fixtures (`conformance/fixtures`, pinned by `conformance/VERSION`): every control message must encode to the exact fixture bytes, every signalling example must parse and re-serialize to the same JSON, and every reconnect scenario must replay to the expected states. All 199 input vectors from v0.2.0
-replay through the shared keyboard, IME, pointer, geometry and scroll logic. All 21 shared IME vectors also replay unmodified through the Android input connection.
-
-`scripts/run-e2e.sh stream-compose` uses the same runtime-only credentials contract for the default
-UI. The credential-free `DefaultUiGalleryTest` separately captures
-connecting/reconnecting/unavailable/retry, light/dark/custom theme and labels, and
-approval countdown/decision/refetch. Select it with
-`STREAM_E2E_TEST_CLASS=ai.mobilerun.stream.compose.DefaultUiGalleryTest`.
-The separate `DefaultUiE2eTest` verifies live video with navigation and recovery using deliberately
-expired credentials, then restores the provider and clicks Retry. A 401/404 for the initial valid
-device is reported as `Device unavailable:` for the live-device scenario. No real approval task is required.
-
-## Tests
-
-Requires JDK 17.
-
-```sh
-./gradlew check
-```
-
-The CI job runs unit tests and lint for all modules; the emulator test is not part of it. Each fixture test prints a line `conformance: <file> exercised N of M`; the two numbers must be equal.
-
-## Conformance fixtures
-
-Maintainers refresh the vendored `conformance/fixtures` from the shared fixture source at the tag
-in `conformance/VERSION`. The sync script also regenerates constants:
-
-```sh
-tool/sync-conformance.sh v0.2.0 /path/to/fixture-source
-```
-
-`protocol/src/commonMain/kotlin/ai/mobilerun/stream/protocol/Constants.kt` is generated from `conformance/fixtures/constants.json` by `tool/generate-constants.py` (Python 3, standard library only). CI fails if the committed file is out of date.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for builds, tests, conformance fixtures and release guidance.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache-2.0, see `LICENSE`.
+[Apache-2.0](LICENSE).

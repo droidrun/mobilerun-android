@@ -97,7 +97,7 @@ The sample tests
 cover helper/static launch validation, consumed launch state, the native HTTP boundary,
 theme tokens/labels and the local approval fake. `cd sample/backend && node --test server.test.mjs`
 checks the helper over actual loopback HTTP with an injected SDK stub.
-The library suites cover streaming and input; see README for instrumented checks.
+The library suites cover streaming and input; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-check) for instrumented checks.
 
 ## Known limitations
 
