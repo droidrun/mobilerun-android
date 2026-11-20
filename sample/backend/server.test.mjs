@@ -1,9 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createHelper } from './server.mjs';
+import { spawnSync } from 'node:child_process';
+
+test('importing the helper does not listen', () => {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import { Server } from 'node:http';
+    process.env.MOBILERUN_API_KEY = 'test-only';
+    Server.prototype.listen = () => { throw new Error('unexpected listen'); };
+    await import('./server.mjs');
+  `], { cwd: new URL('.', import.meta.url), timeout: 5_000 });
+  assert.equal(result.status, 0, result.stderr.toString());
+});
 
 async function fixture(t, sdk) {
+  const { createHelper } = await import('./server.mjs');
   const server = createHelper(sdk);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');

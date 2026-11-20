@@ -35,6 +35,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 private fun example(file: String, index: Int = 0): JsonObject =
@@ -46,9 +47,10 @@ private val sessionId = example("client-keep-alive").getValue("sessionId").jsonP
 private fun <T> TestScope.attempt(block: suspend () -> T) = async { runCatching { block() } }
 
 /** Drives a [StreamSessionEngine] against fake transports on the virtual clock of [scope]. */
-private class Harness(
+internal class Harness(
     val scope: TestScope,
     first: StreamCredentials? = StreamCredentials("wss://stream.test/a", "token-a"),
+    hostContext: CoroutineContext = scope.backgroundScope.coroutineContext,
 ) {
     val signalling = FakeSignalling { scope.currentTime }
     val peers = FakePeers()
@@ -63,7 +65,7 @@ private class Harness(
     val log = mutableListOf<String>()
 
     /** The scope the app hands to the engine; cancelling it must release everything, like close(). */
-    val host = CoroutineScope(scope.backgroundScope.coroutineContext + Job(scope.backgroundScope.coroutineContext[Job]))
+    val host = CoroutineScope(hostContext + Job(scope.backgroundScope.coroutineContext[Job]))
 
     val engine = StreamSessionEngine(
         scope = host,
@@ -196,6 +198,7 @@ class StreamSessionEngineTest {
             assertTrue(h.signalling.sockets.isEmpty())
             assertEquals(StreamStatus.Reconnecting(1), h.status)
             assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
+            assertEquals(1, h.log.count { it == "token provider failed" })
             assertTrue(h.log.none { it.contains("private-key") })
             h.engine.close()
             h.settle()
@@ -217,6 +220,7 @@ class StreamSessionEngineTest {
         assertTrue(h.signalling.sockets.isEmpty())
         h.advance(1)
         assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(1, h.log.count { it == "token provider timeout" })
         late.complete("late-key")
         h.settle()
         assertTrue(h.signalling.sockets.isEmpty())
@@ -416,6 +420,7 @@ class StreamSessionEngineTest {
             h.settle()
             assertEquals(expectedCount, calls, url)
             assertEquals(expectedCount, h.signalling.sockets.size, url)
+            assertEquals(1 - expectedCount, h.log.count { it == "token provider endpoint rejected" })
             h.engine.close()
             h.settle()
         }

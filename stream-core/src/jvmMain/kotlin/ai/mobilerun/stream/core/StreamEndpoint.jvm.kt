@@ -9,7 +9,7 @@ internal actual fun isSecureProviderEndpoint(url: String): Boolean {
     val uri = try { URI(url) } catch (_: Exception) { return false }
     val host = uri.host?.lowercase() ?: return false
     val scheme = uri.scheme?.lowercase() ?: return false
-    val validPort = uri.port in -1..65535
+    val validPort = uri.port <= 65535
     if (!validPort) return false
     if (scheme == "wss") return true
     val ipv6Loopback = Regex("""\[(?:0*:)+0{0,3}1\]""").matches(host)

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.concurrent.Volatile
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
@@ -89,6 +91,7 @@ public class StreamSessionEngine(
 ) {
     private val engineJob = SupervisorJob(scope.coroutineContext[Job])
     private val serial: CoroutineDispatcher = serialDispatcher(scope)
+    private val providerDispatcher = scope.coroutineContext[ContinuationInterceptor] ?: Dispatchers.Default
     private val engineScope = CoroutineScope(scope.coroutineContext + serial + engineJob)
 
     private val mutableStatus = MutableStateFlow<StreamStatus>(StreamStatus.Connecting)
@@ -338,22 +341,31 @@ public class StreamSessionEngine(
                 return
             }
             if (!isSecureProviderEndpoint(target.url)) {
+                log("token provider endpoint rejected")
                 fail(releaseImmediately = true)
                 return
             }
-            val pending = startTokenProvider(scope.coroutineContext, provider)
+            val pending = startTokenProvider(scope.coroutineContext + providerDispatcher, provider)
             providerJob = pending
             scope.launchGuarded {
                 val key = try {
                     withTimeout(ReconnectPolicy.TOKEN_PROVIDER_TIMEOUT_MS) { pending.await() }
+                } catch (_: TimeoutCancellationException) {
+                    if (!isCurrent) return@launchGuarded
+                    log("token provider timeout")
+                    fail(releaseImmediately = true)
+                    return@launchGuarded
                 } catch (_: Exception) {
                     // Includes a provider's own cancellation; a cancelled attempt is already stale.
+                    if (!isCurrent) return@launchGuarded
+                    log("token provider failed")
                     fail(releaseImmediately = true)
                     return@launchGuarded
                 }
                 providerJob = null
                 if (!isCurrent) return@launchGuarded
                 if (key.isBlank()) {
+                    log("token provider failed")
                     fail(releaseImmediately = true)
                     return@launchGuarded
                 }
