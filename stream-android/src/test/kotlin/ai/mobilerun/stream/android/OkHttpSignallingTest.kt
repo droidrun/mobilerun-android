@@ -104,11 +104,11 @@ class OkHttpSignallingTest {
     @Test
     fun tokenIsSentAsQueryParameter() {
         upgrade()
-        open(credentials(path = "/stream?device=d1&token=old"))
+        open(credentials(token = " key +&= ", path = "/stream?device=d1&token=old&token=older"))
         assertEquals("open", next(events))
         val request = server.takeRequest(5, TimeUnit.SECONDS)!!
         assertEquals("/stream", request.requestUrl!!.encodedPath)
-        assertEquals(listOf("tok"), request.requestUrl!!.queryParameterValues("token"))
+        assertEquals(listOf(" key +&= "), request.requestUrl!!.queryParameterValues("token"))
         assertEquals("d1", request.requestUrl!!.queryParameter("device"))
     }
 
@@ -150,6 +150,22 @@ class OkHttpSignallingTest {
         assertEquals("closed", next(events))
         assertFalse(transport.send("x"))
         assertNull(events.poll(300, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun goingAwayCodeIsPropagatedExactlyOnce() {
+        val opened = LinkedBlockingQueue<WebSocket>()
+        upgrade { opened += it }
+        val target = object : SignallingListener by listener {
+            override fun onClosed(code: Int) { events += "closed:$code" }
+        }
+        val transport = open(credentials(), target)
+        assertEquals("open", next(events))
+        assertNotNull(opened.poll(5, TimeUnit.SECONDS)).close(1001, "going away")
+        assertEquals("closed:1001", next(events))
+        assertTrue(serverFinished.await(5, TimeUnit.SECONDS))
+        assertFalse(transport.send("x"))
+        assertTrue(events.isEmpty())
     }
 
     @Test

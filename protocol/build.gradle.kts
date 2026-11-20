@@ -1,3 +1,6 @@
+// Copyright 2026 Mobilerun
+// SPDX-License-Identifier: Apache-2.0
+
 plugins {
     alias(libs.plugins.maven.publish)
     alias(libs.plugins.kotlin.multiplatform)

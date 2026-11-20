@@ -3,16 +3,24 @@
 
 package ai.mobilerun.stream.core
 
+/** Supplies a fresh, single-use key before each new signalling socket. */
+public typealias StreamTokenProvider = suspend () -> String
+
 /**
  * Where and how to open the signalling WebSocket of one device stream.
  *
  * [toString] never contains the token, so instances are safe to log.
  *
  * @property url the WebSocket URL (`wss://...`) of the stream.
- * @property token the stream token; sent as the `token` query parameter. May be empty if the URL
- *   already carries its own authorisation.
+ * @property token legacy static token (deprecated path); prefer [tokenProvider]. May be empty.
+ * @property tokenProvider fresh key callback, bound to this target. Takes precedence over static or
+ *   embedded tokens, with a 10 s deadline and no fallback. Callback identity is excluded from equality.
  */
-public class StreamCredentials(public val url: String, public val token: String) {
+public class StreamCredentials(
+    public val url: String,
+    public val token: String = "",
+    public val tokenProvider: StreamTokenProvider? = null,
+) {
     override fun equals(other: Any?): Boolean =
         other is StreamCredentials && other.url == url && other.token == token
 

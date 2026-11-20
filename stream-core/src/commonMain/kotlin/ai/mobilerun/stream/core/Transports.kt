@@ -32,6 +32,9 @@ public interface SignallingListener {
     /** The socket closed, normally or abruptly. */
     public fun onClosed()
 
+    /** The socket closed with the RFC 6455 [code]. Old listeners retain their close callback. */
+    public fun onClosed(code: Int): Unit = onClosed()
+
     /**
      * The socket failed.
      *

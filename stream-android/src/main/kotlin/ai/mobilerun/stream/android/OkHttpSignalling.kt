@@ -64,10 +64,10 @@ internal class OkHttpSignallingTransport(listener: SignallingListener) :
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
         webSocket.close(1000, null)
-        end { it.onClosed() }
+        end { it.onClosed(code) }
     }
 
-    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end { it.onClosed() }
+    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = end { it.onClosed(code) }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) =
         end { it.onFailure(response?.code) }

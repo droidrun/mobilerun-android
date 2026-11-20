@@ -151,6 +151,22 @@ class DeviceStreamE2eTest {
     }
 
     @Test
+    fun goingAwayReleasesNativeMediaBeforeReconnect() = runBlocking {
+        session.start()
+        device.awaitConnectedWithVideo(session)
+        val sockets = tap.transports.size
+        val closingPeer = peer
+        tap.listener!!.onClosed(1001)
+        // Below the minimum first backoff (750 ms): release must precede a new mount.
+        withTimeout(500) { session.videoTrack.first { it == null } }
+        assertEquals(null, session.videoSize.value)
+        assertFalse(closingPeer.sendControl(byteArrayOf(1)))
+        assertFalse(closingPeer.sendHover(byteArrayOf(1)))
+        assertEquals(sockets, tap.transports.size)
+        assertTrue(session.status.value is StreamStatus.Reconnecting)
+    }
+
+    @Test
     fun firstFrameTapAndReconnect() = runBlocking {
         val counter = FrameCounter(session, scope)
         val t0 = SystemClock.elapsedRealtime()

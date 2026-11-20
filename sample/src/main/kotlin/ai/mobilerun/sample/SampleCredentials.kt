@@ -18,3 +18,17 @@ fun parseCredentials(json: String): StreamCredentials {
     }
     return StreamCredentials(field("streamUrl"), field("streamToken"))
 }
+
+/** Consumed launch input; helper mode carries no credentials in the app configuration. */
+class SampleLaunchConfig(val credentials: StreamCredentials? = null, val backend: SampleBackend? = null)
+
+fun parseLaunchConfig(json: String): SampleLaunchConfig {
+    val fields = try { JSONObject(json) } catch (_: Exception) {
+        throw IllegalArgumentException("Credentials must be a JSON object")
+    }
+    if (!fields.has("helperBaseUrl")) return SampleLaunchConfig(credentials = parseCredentials(json))
+    val base = fields.opt("helperBaseUrl") as? String
+    val device = fields.opt("deviceId") as? String
+    require(!base.isNullOrBlank() && !device.isNullOrBlank()) { "Invalid helper configuration" }
+    return SampleLaunchConfig(backend = SampleBackend(base, device))
+}

@@ -9,30 +9,55 @@ The Gradle wrapper pins Gradle 9.6.0; Kotlin is 2.4.21 and AGP is 9.5.0.
 
 ## Credentials and launch
 
-Use a device in your Mobilerun account. Your backend fetches `streamUrl` and
-`streamToken` via the API and supplies them to the app. Never ship an API key in an app.
-Create a local JSON file outside the checkout (do not commit it):
-
-```json
-{"streamUrl":"wss://your-stream-endpoint", "streamToken":"your-short-lived-token"}
-```
+Use an existing device in your Mobilerun account. Start the unauthenticated **local-only** helper:
 
 ```sh
-scripts/run-sample.sh /path/to/credentials.json
+cd sample/backend
+npm ci
+npm start
 ```
 
-The script builds the debug sample, boots the first configured AVD, installs the app,
-and streams the JSON into the app's private storage through `adb run-as`. The app
-consumes and deletes that file at launch. `SAMPLE_AVD` selects a specific AVD;
-`SAMPLE_EMULATOR_PORT` selects an unused even port (default 5582). Keep the script running while testing; Ctrl-C stops its emulator. It never uses
-an already running emulator. Close other instances of the
-selected AVD before launch. On a fresh machine, create an AVD before running.
+The helper reads `MOBILERUN_API_KEY` only from its process environment; set it using your secret
+manager/environment, never in command arguments or launch JSON. `MOBILERUN_API_URL` optionally selects
+an upstream base (with or without a trailing `/v1`); the helper uses exactly one `/v1`.
+It binds **127.0.0.1:3001**. Never expose it through a tunnel. Production integrations must authenticate
+callers and authorize device access in their own backend.
+The helper only answers loopback Host headers on its listening port and requests without Origin.
 
-You can also launch the installed sample manually and paste both fields into its
-Connect form. The token is obscured; credentials stay in memory after loading,
-are never saved in instance state or logs, and are lost when the process exits.
-Use Credentials to edit them; Connect applies changes. Reconnect starts a fresh
-session with the current values. For expired tokens, load fresh credentials.
+- `GET /api/v1/devices/:deviceId` uses `sdk.devices.get(id)` and returns only `{id,state,streamUrl}`.
+- `POST /api/v1/devices/:deviceId/stream-key` uses `sdk.api.post('/identity/stream-keys',
+  {body:{deviceId,ttlSeconds:120},maxRetries:0})` and returns only `{key,keyId,expiresAt}` (201/no-store).
+  The upstream wire endpoint is `POST /v1/identity/stream-keys`.
+
+Create a credential-free launch JSON file outside the checkout:
+
+```json
+{"helperBaseUrl":"http://localhost:3001","deviceId":"DEVICE_UUID"}
+```
+
+From the repo root:
+
+```sh
+scripts/run-sample.sh /path/to/launch.json
+```
+
+The runner builds the debug sample, boots its own AVD, sets `adb reverse tcp:3001 tcp:3001`,
+installs the app and streams the JSON through stdin into app-private storage. The app consumes and
+deletes it at launch. Cleanup removes the reverse mapping and stops only that owned emulator.
+`SAMPLE_AVD` selects an idle AVD; `SAMPLE_EMULATOR_PORT` selects an unused even port (default 5582).
+Never launch an AVD already in use. The debug sample permits cleartext only to localhost/127.0.0.1;
+release and library manifests have no cleartext exception. No 10.0.2.2 configuration is needed.
+
+The immutable helper/device configuration is bound to one session. Discovery resolves the target;
+its `tokenProvider` POSTs once for every socket, including reconnect. Keys never enter app launch
+JSON, UI, storage or logs. The provider deadline is 10 s, followed by the independent 45 s socket
+watchdog (15 s open and 15 s configuration budgets). A failed/blank/timed-out provider has no fallback.
+Stream URLs still require WSS outside exact loopback in provider mode.
+
+The manual URL/token form and old `{"streamUrl":"wss://…","streamToken":"…"}` file format remain
+**legacy diagnostics**. The static token path is deprecated; discovery is not. A pasted single-use
+key cannot reconnect. Credentials stays available to select a manual target; Connect replaces the
+helper session. Reconnect creates a fresh session using its existing immutable source.
 
 ## What to try
 
@@ -62,19 +87,23 @@ Typical values on an emulator over a relay connection: first frame ~3–4 s,
 ## Automated checks
 
 ```sh
-./gradlew check :sample:assembleDebug
+./gradlew check --no-daemon
+./gradlew :sample:assembleDebug --no-daemon
 # Focused sample credentials and Compose checks:
 ./gradlew :sample:testDebugUnitTest
 ```
 
 The sample tests
-cover JSON validation/redaction, theme tokens/labels and the local approval fake.
-The library suites cover streaming and input; see README for instrumented checks.
+cover helper/static launch validation, consumed launch state, the native HTTP boundary,
+theme tokens/labels and the local approval fake. `cd sample/backend && node --test server.test.mjs`
+checks the helper over actual loopback HTTP with an injected SDK stub.
+The library suites cover streaming and input; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-check) for instrumented checks.
 
 ## Known limitations
 
-Publishing has not happened; use the source checkout. The sample credentials provider reuses the entered token;
-a production backend should refresh it. Emulator two-finger and IME support depend
+Publishing has not happened; use the source checkout. Static diagnostic mode reuses the entered token;
+use helper/provider mode for single-use keys. Close 1001 immediately releases media and reconnects
+in both modes; other-close release timing is unchanged. Emulator two-finger and IME support depend
 on host configuration.
 
 Some emoji and CJK characters may not arrive on Cloud Android devices through text injection.

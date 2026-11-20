@@ -1,3 +1,6 @@
+// Copyright 2026 Mobilerun
+// SPDX-License-Identifier: Apache-2.0
+
 import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.variant.LibraryAndroidComponentsExtension
 import kotlinx.validation.KotlinApiBuildTask

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Mobilerun
+# SPDX-License-Identifier: Apache-2.0
+
 # Runs either Android module on an existing emulator; credentials are never bundled.
 #
 # Usage: STREAM_E2E_CREDENTIALS=<json> [STREAM_E2E_OUT=<dir>] [TAP_X=<px> TAP_Y=<px>] \
