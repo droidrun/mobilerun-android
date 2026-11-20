@@ -52,6 +52,7 @@ The static `token` field/path is deprecated in documentation and retained for le
 `StreamCredentials(streamUrl, staticToken)` still works, including empty-token URL handling.
 A pasted single-use key cannot support reconnect. Credentials discovery itself is not deprecated.
 For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](TESTING.md).
+The sample helper only answers loopback Host headers on its listening port and requests without Origin.
 
 ## Status: pre-release
 

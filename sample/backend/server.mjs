@@ -10,6 +10,10 @@ export function createHelper(sdk) {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(body));
     };
+    const port = req.socket.localPort;
+    const allowedHost = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`].includes(req.headers.host);
+    const forbiddenRequest = !allowedHost || req.headers.origin !== undefined;
+    if (forbiddenRequest) return reply(403, { error: 'forbidden' });
     const route = /^\/api\/v1\/devices\/([A-Za-z0-9_-]+)(\/stream-key)?$/.exec(req.url ?? '');
     if (!route) return reply(404, { error: 'not_found' });
     const [, deviceId, mint] = route;

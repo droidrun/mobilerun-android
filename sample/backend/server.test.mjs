@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
+import { request } from 'node:http';
+import { json } from 'node:stream/consumers';
 
 test('importing the helper does not listen', () => {
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
@@ -20,6 +22,38 @@ async function fixture(t, sdk) {
   await once(server, 'listening');
   t.after(() => new Promise(resolve => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}/api/v1/devices/device-a`;
+}
+
+for (const host of ['foreign.test', 'localhost:0']) {
+  test(`foreign Host ${host} is forbidden without calling upstream`, async t => {
+    const calls = [];
+    const url = await fixture(t, { devices: { get: async id => {
+      calls.push(id);
+      return {};
+    } } });
+    const response = await new Promise((resolve, reject) => {
+      request(url, { headers: { Host: host } }, resolve).on('error', reject).end();
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.deepEqual(await json(response), { error: 'forbidden' });
+    assert.deepEqual(calls, []);
+  });
+}
+
+for (const origin of ['', 'null', 'https://foreign.test']) {
+  test(`Origin present (${JSON.stringify(origin)}) is forbidden without calling upstream`, async t => {
+    const calls = [];
+    const url = await fixture(t, { api: { post: async (...args) => {
+      calls.push(args);
+      return {};
+    } } });
+    const response = await fetch(`${url}/stream-key`, { method: 'POST', headers: { Origin: origin } });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await response.json(), { error: 'forbidden' });
+    assert.deepEqual(calls, []);
+  });
 }
 
 // SDK 6.2.1 Device.info is DeviceInfo (DeviceRetrieveResponse); extra fields stay private.

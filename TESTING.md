@@ -22,6 +22,7 @@ manager/environment, never in command arguments or launch JSON. `MOBILERUN_API_U
 an upstream base (with or without a trailing `/v1`); the helper uses exactly one `/v1`.
 It binds **127.0.0.1:3001**. Never expose it through a tunnel. Production integrations must authenticate
 callers and authorize device access in their own backend.
+The helper only answers loopback Host headers on its listening port and requests without Origin.
 
 - `GET /api/v1/devices/:deviceId` uses `sdk.devices.get(id)` and returns only `{id,state,streamUrl}`.
 - `POST /api/v1/devices/:deviceId/stream-key` uses `sdk.api.post('/identity/stream-keys',
