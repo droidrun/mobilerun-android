@@ -106,6 +106,11 @@ StreamTheme { DeviceStream(session, Modifier.fillMaxSize()) }
 session.close(); scope.cancel()
 ```
 
+To react to failures, collect `session.errors`: each failed attempt reports a `reason`
+(`CredentialsUnavailable`, `TokenRejected`, `ConnectionRefused`, `Disconnected`, …), its `attempt`
+and `final` once retries stop. See [Stream keys](docs/stream-keys.md#errors).
+Every user-visible string comes from `StreamLabels`. The static `StreamCredentials(url, token)` form is deprecated.
+
 Never ship an API key in the app. Never cache keys or automatically retry mint requests.
 For the runnable sample, see [TESTING.md](TESTING.md).
 

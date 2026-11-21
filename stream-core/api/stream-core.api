@@ -62,6 +62,28 @@ public abstract interface class ai/mobilerun/stream/core/StreamCredentialsProvid
 public final class ai/mobilerun/stream/core/StreamDisconnectedException : ai/mobilerun/stream/core/StreamException {
 }
 
+public final class ai/mobilerun/stream/core/StreamError {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttempt ()I
+	public final fun getFinal ()Z
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getReason ()Lai/mobilerun/stream/core/StreamErrorReason;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class ai/mobilerun/stream/core/StreamErrorReason : java/lang/Enum {
+	public static final field ConnectionRefused Lai/mobilerun/stream/core/StreamErrorReason;
+	public static final field CredentialsUnavailable Lai/mobilerun/stream/core/StreamErrorReason;
+	public static final field DeviceUnavailable Lai/mobilerun/stream/core/StreamErrorReason;
+	public static final field Disconnected Lai/mobilerun/stream/core/StreamErrorReason;
+	public static final field TokenRejected Lai/mobilerun/stream/core/StreamErrorReason;
+	public static final field Unknown Lai/mobilerun/stream/core/StreamErrorReason;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lai/mobilerun/stream/core/StreamErrorReason;
+	public static fun values ()[Lai/mobilerun/stream/core/StreamErrorReason;
+}
+
 public abstract class ai/mobilerun/stream/core/StreamException : java/lang/RuntimeException {
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 }

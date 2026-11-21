@@ -12,7 +12,8 @@ public typealias StreamTokenProvider = suspend () -> String
  * [toString] never contains the token, so instances are safe to log.
  *
  * @property url the WebSocket URL (`wss://...`) of the stream.
- * @property token legacy static token (deprecated path); prefer [tokenProvider]. May be empty.
+ * @property token legacy static token. **Deprecated:** a stream key is single-use, so a static token
+ *   cannot reconnect; the session logs one warning when it is used. Prefer [tokenProvider]. May be empty.
  * @property tokenProvider fresh key callback, bound to this target. Takes precedence over static or
  *   embedded tokens, with a 10 s deadline and no fallback. Callback identity is excluded from equality.
  */

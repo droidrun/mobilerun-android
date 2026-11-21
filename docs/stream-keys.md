@@ -46,7 +46,30 @@ maxRetries: 0})` with `@mobilerun/sdk@6.2.1` and a base URL ending in `/v1`: the
 Keys are consumed at admission, even if the downstream upgrade fails; never cache or retry a mint
 request automatically. API keys stay on your authenticated, device-authorizing backend.
 
-The static `token` field/path is deprecated in documentation and retained for legacy diagnostics:
+## Errors
+
+`session.errors` is a `SharedFlow<StreamError>` with one event per failed connection attempt. It has no
+replay: collect it before `start()`. A `StreamError` has `reason`, a log-safe `message` (never a key or URL),
+`attempt` (failures in the current cycle, from 1) and `final`, which is `true` when retries stopped and
+`retry()` or `handleWake()` must start a new cycle. Show your own text to users.
+
+| `StreamErrorReason` | Meaning |
+|---|---|
+| `CredentialsUnavailable` | The token provider threw, returned a blank key or exceeded 10 s. |
+| `TokenRejected` | The upgrade answered HTTP 401: the key was rejected, already used or expired. |
+| `ConnectionRefused` | The socket ended before it opened for another reason (HTTP 403 or other status, wrong device, refused origin, no route). |
+| `Disconnected` | An open session dropped, including the server's session cap. |
+| `DeviceUnavailable` | Reserved; the signalling protocol has no offline message yet. |
+| `Unknown` | Anything else (for example a malformed startup message). |
+
+```kotlin
+scope.launch { session.errors.collect { error -> if (error.final) showBanner(error.reason) } }
+```
+
+## Legacy static token
+
+The static `token` field/path is deprecated: a key is single-use, so it cannot reconnect, and the
+session logs one `MobilerunStream` warning per session when it is used. It is retained for legacy diagnostics:
 `StreamCredentials(streamUrl, staticToken)` still works, including empty-token URL handling.
 A pasted single-use key cannot support reconnect. Credentials discovery itself is not deprecated.
 For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](../TESTING.md).

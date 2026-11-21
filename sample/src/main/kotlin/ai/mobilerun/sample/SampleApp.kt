@@ -6,6 +6,7 @@ package ai.mobilerun.sample
 import ai.mobilerun.stream.android.DeviceStreamSession
 import ai.mobilerun.stream.compose.DeviceStream
 import ai.mobilerun.stream.compose.StreamLabels
+import ai.mobilerun.stream.core.StreamError
 import ai.mobilerun.stream.compose.StreamTheme
 import ai.mobilerun.stream.compose.StreamThemeTokens
 import ai.mobilerun.stream.compose.TaskApproval
@@ -152,6 +153,10 @@ private fun ColumnScope.SampleContent(
                 SampleButton("Reconnect", { generation++ })
                 SampleButton(if (showStats) "Hide stats" else "Stats", { showStats = !showStats })
             }
+            // Reasons come from the SDK; an app shows its own text. The sample prints the reason name.
+            var lastError by remember { mutableStateOf<StreamError?>(null) }
+            LaunchedEffect(session) { session.errors.collect { lastError = it } }
+            lastError?.let { Label("Last error: ${it.reason} (attempt ${it.attempt}${if (it.final) ", final" else ""})") }
             if (showStats) {
                 val stats by session.stats.collectAsState()
                 StatsPanel(stats)

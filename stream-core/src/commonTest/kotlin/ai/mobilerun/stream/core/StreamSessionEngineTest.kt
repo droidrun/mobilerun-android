@@ -63,6 +63,7 @@ internal class Harness(
     /** While set, the provider suspends until it completes (a slow credentials request). */
     var gate: CompletableDeferred<Unit>? = null
     val log = mutableListOf<String>()
+    val warnings = mutableListOf<String>()
 
     /** The scope the app hands to the engine; cancelling it must release everything, like close(). */
     val host = CoroutineScope(hostContext + Job(scope.backgroundScope.coroutineContext[Job]))
@@ -82,6 +83,7 @@ internal class Harness(
         nowMs = { scope.currentTime },
         newSessionId = { sessionId },
         logger = { log += it },
+        warn = { warnings += it },
     )
 
     val socket get() = signalling.sockets.last()
