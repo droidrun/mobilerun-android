@@ -750,8 +750,8 @@ public class StreamSessionEngine(
         const val HTTP_FORBIDDEN = 403
         const val ERROR_BUFFER = 16
         const val STATIC_TOKEN_WARNING =
-            "StreamCredentials.token is deprecated: a stream key is single-use, so a static token cannot " +
-                "reconnect. Pass tokenProvider and mint a fresh key per connection."
+            "StreamCredentials.token is deprecated and reused on every reconnect, so it cannot carry " +
+                "single-use stream keys. Pass tokenProvider and mint a fresh key per connection."
     }
 }
 

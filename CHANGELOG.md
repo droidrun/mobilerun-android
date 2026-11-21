@@ -9,4 +9,4 @@
 - Inbound video and connection statistics.
 - Visibility and network lifecycle recovery.
 - Device screenshots with typed failure and timeout errors.
-- Per-connect `tokenProvider` with single-use keys, `errors` flow with failure reasons, and a deprecation warning for the static token.
+- Per-connect `tokenProvider` with single-use keys, `errors` flow with failure reasons, and a deprecation warning for the legacy static token (still reused on reconnect until the legacy hard cut).

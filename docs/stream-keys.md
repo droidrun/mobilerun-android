@@ -68,10 +68,14 @@ scope.launch { session.errors.collect { error -> if (error.final) showBanner(err
 
 ## Legacy static token
 
-The static `token` field/path is deprecated: a key is single-use, so it cannot reconnect, and the
-session logs one `MobilerunStream` warning per session when it is used. It is retained for legacy diagnostics:
+`tokenProvider` is the recommended path. The static `token` field is **legacy and deprecated** and will be
+removed at the legacy token hard cut; the session logs one `MobilerunStream` warning per session when it is used.
 `StreamCredentials(streamUrl, staticToken)` still works, including empty-token URL handling.
-A pasted single-use key cannot support reconnect. Credentials discovery itself is not deprecated.
+
+**Explicit exception:** with a static token the SDK reuses the same token for every reconnect, which is the
+one place a token is used for more than one socket. That only works for tokens that are not single-use. A
+single-use stream key (`POST /v1/identity/stream-keys`) is consumed at admission, so a reconnect with it is
+rejected: use `tokenProvider` for single-use keys. Credentials discovery itself is not deprecated.
 For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](../TESTING.md).
 The sample helper only answers loopback Host headers on its listening port and requests without Origin.
 
