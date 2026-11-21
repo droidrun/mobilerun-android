@@ -27,7 +27,7 @@ StreamTheme { // light by default; opt in with followSystem = true
 has the same twelve keys as React: `paymentCardTitle`, `waiting`, `card`, `app`, `domain`, `timeLeft`,
 `expired`, `approve`, `deny`, `viewSwitch`, `details`, `device`. Defaults are English; `{time}` in
 `timeLeft` and `{attempt}`/`{max}` in `StreamLabels.reconnectingAttempt` are replaceable placeholders.
-Across SDKs the labels `unavailable`, `retry`, `connecting` and `disconnected` exist; here `disconnected` is `reconnecting`.
+`labels.disconnected` (default `disconnected`) is shown for the first reconnect after an open session dropped; other reconnects use `reconnecting` / `reconnectingAttempt`.
 Backend-provided fact values and error messages remain the integrator's responsibility to localize.
 
 Override individual theme tokens via `copy`, without modifying the rest:

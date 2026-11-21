@@ -128,6 +128,7 @@ public final class ai/mobilerun/stream/core/StreamStatus$Connecting : ai/mobiler
 
 public final class ai/mobilerun/stream/core/StreamStatus$Reconnecting : ai/mobilerun/stream/core/StreamStatus {
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAfterDrop ()Z
 	public final fun getAttempt ()I
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

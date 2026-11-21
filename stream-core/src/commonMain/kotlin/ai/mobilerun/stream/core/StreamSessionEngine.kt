@@ -267,7 +267,7 @@ public class StreamSessionEngine(
 
     private fun onSnapshot(snapshot: StreamReconnectSnapshot) {
         if (closed) return
-        mutableStatus.value = snapshot.toStatus()
+        mutableStatus.value = snapshot.toStatus(afterDrop = failureReason == StreamErrorReason.Disconnected)
         reportError(snapshot)
         if (snapshot.status == StreamReconnectStatus.Unavailable) releaseConnection()
         log("status ${snapshot.status} attempt=${snapshot.attempt}")

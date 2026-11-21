@@ -10,9 +10,10 @@ import kotlin.test.assertEquals
 
 class ThemeLabelsTest {
     // Cross-module fixtures keep the SDK-created state's constructor internal to core.
-    private fun reconnecting(attempt: Int): StreamStatus.Reconnecting =
-        StreamStatus.Reconnecting::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
-            .newInstance(attempt)
+    private fun reconnecting(attempt: Int, afterDrop: Boolean = false): StreamStatus.Reconnecting =
+        StreamStatus.Reconnecting::class.java
+            .getDeclaredConstructor(Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            .newInstance(attempt, afterDrop)
 
     @Test fun reactLightTokens() {
         val t = StreamThemeTokens.light()
@@ -37,6 +38,15 @@ class ThemeLabelsTest {
         assertEquals("reconnecting", labels.statusLabel(reconnecting(1)))
         assertEquals("reconnecting (2/6)", labels.statusLabel(reconnecting(2)))
         assertEquals("Recover 3", labels.copy(reconnectingAttempt = "Recover {attempt}").statusLabel(reconnecting(3)))
+    }
+    @Test fun disconnectedLabelShowsOnlyForTheFirstReconnectAfterADrop() {
+        val labels = StreamLabels()
+        assertEquals("disconnected", labels.statusLabel(reconnecting(1, afterDrop = true)))
+        assertEquals("Lost", labels.copy(disconnected = "Lost").statusLabel(reconnecting(1, afterDrop = true)))
+        assertEquals("reconnecting", labels.copy(disconnected = "Lost").statusLabel(reconnecting(1)))
+        assertEquals("reconnecting (2/6)", labels.statusLabel(reconnecting(2, afterDrop = true)))
+        assertEquals(labels, StreamLabels(connecting = "connecting"))
+        assertEquals(false, labels == labels.copy(disconnected = "x"))
     }
     @Test fun approvalEnglishDefaultsMatchReact() {
         val t = TaskApprovalLabels()

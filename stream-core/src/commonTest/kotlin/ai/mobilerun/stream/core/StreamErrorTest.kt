@@ -113,6 +113,22 @@ class StreamErrorTest {
     }
 
     @Test
+    fun onlyADroppedOpenSessionMarksTheReconnectAsAfterDrop() = runTest {
+        val h = Harness(this)
+        h.connect()
+        h.socket.serverCloses()
+        h.settle()
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
+
+        val refused = Harness(this)
+        refused.engine.start()
+        refused.settle()
+        refused.socket.serverCloses()
+        refused.settle()
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = false), refused.status)
+    }
+
+    @Test
     fun peerFailureAfterOpenReportsDisconnected() = runTest {
         val h = Harness(this)
         val errors = collectErrors(h)
