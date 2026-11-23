@@ -116,6 +116,8 @@ For the runnable sample, see [TESTING.md](TESTING.md).
 
 ## Guides
 
+Coding agents: use the [Mobilerun device stream skill](skills/mobilerun-device-stream/SKILL.md) for Kotlin integration.
+
 | Guide | Covers |
 |---|---|
 | [Stream keys](docs/stream-keys.md) | Token provider, deadlines, secure URLs and legacy credentials |
