@@ -1,8 +1,9 @@
 ← [README](../README.md) · [Partner guide](https://docs.mobilerun.ai/partners)
 
-## Status: pre-release
+## Package
 
-The headless core, Android connection layer and interactive video view exist. The optional default UI, approval controller and white-label theme exist; nothing is published.
+The SDK includes a headless core, Android connection layer, interactive video view, optional default UI,
+approval controller and white-label theme. Version `v0.1.0` uses a git tag and JitPack distribution.
 
 | Module | Package | Contents |
 |---|---|---|
@@ -23,20 +24,20 @@ in `commonMain`, with JVM URL validation in `jvmMain`. `:stream-android` is an A
 (minSdk 24, compileSdk 36, JVM 17).
 
 
-## Installation (after first release)
+## Installation
 
-These coordinates are reserved for the first Maven Central release; they are not available yet.
-With `mavenCentral()` configured, use:
+Configure the filtered JitPack repository as shown in the [README](../README.md#install).
+Once the public `v0.1.0` tag has built successfully on JitPack, use one of:
 
 ```kotlin
 dependencies {
-    implementation("ai.mobilerun:mobilerun-stream-android:0.1.0")
+    implementation("com.github.droidrun.mobilerun-android:mobilerun-stream-android:v0.1.0")
     // Optional Compose UI; includes the Android streaming module transitively.
-    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+    // implementation("com.github.droidrun.mobilerun-android:mobilerun-stream-compose:v0.1.0")
 }
 ```
 
 Android requires minSdk 24 and JDK 17. For headless JVM use, choose
-`ai.mobilerun:mobilerun-stream-core:0.1.0`; Gradle selects its JVM variant.
+`com.github.droidrun.mobilerun-android:mobilerun-stream-core:v0.1.0`; Gradle selects its JVM variant.
 See [RELEASING.md](../RELEASING.md) for artifact details and the release checklist.
 

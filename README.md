@@ -21,7 +21,7 @@
 ·
 <a href="https://cloud.mobilerun.ai">☁️ Mobilerun Cloud</a>
 
-[![Status](https://img.shields.io/badge/status-pre--release-grey.svg)](#install)
+[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](#install)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84.svg)](#install)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/discord/1360219330318696488?color=white&label=Discord&logo=discord&logoColor=white)](https://discord.gg/ZZbKEZZkwK)
@@ -60,17 +60,34 @@
 
 ## Install
 
-The SDK is not published yet; use the source checkout today.
-Clone this repository and open it in Android Studio, then add to an app module inside this checkout:
+Version `v0.1.0` is distributed from the git tag through [JitPack](https://jitpack.io).
+The repository must be public and the tag's JitPack build must succeed before these coordinates resolve.
+Add the repository in `settings.gradle.kts`:
 
 ```kotlin
-dependencies {
-    implementation(project(":stream-compose"))
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("https://jitpack.io")
+            content { includeGroup("com.github.droidrun.mobilerun-android") }
+        }
+    }
 }
 ```
 
-For a View host, use `project(":stream-android")` instead.
-See [package and planned artifacts](docs/package.md) for module details and future Maven coordinates.
+Then add to your app module:
+
+```kotlin
+dependencies {
+    implementation("com.github.droidrun.mobilerun-android:mobilerun-stream-compose:v0.1.0")
+}
+```
+
+For a View-only host, use
+`com.github.droidrun.mobilerun-android:mobilerun-stream-android:v0.1.0` instead.
+See [package and artifacts](docs/package.md) for module details and headless JVM use.
 
 ## Quick start
 
@@ -119,7 +136,7 @@ For the runnable sample, see [TESTING.md](TESTING.md).
 | Guide | Covers |
 |---|---|
 | [Stream keys](docs/stream-keys.md) | Token provider, deadlines, secure URLs and legacy credentials |
-| [Package](docs/package.md) | Modules, supported API, configuration and planned Maven artifacts |
+| [Package](docs/package.md) | Modules, supported API, configuration and JitPack artifacts |
 | [Video and input](docs/video-and-input.md) | View and Compose hosts, touch, keyboard, IME and navigation |
 | [Default UI](docs/default-ui.md) | Chrome, labels, themes and white-label slots |
 | [Task approvals](docs/task-approvals.md) | Backend callbacks, polling, decisions and approval cards |
@@ -133,4 +150,5 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache-2.0](LICENSE).
+[Apache-2.0](LICENSE). App distributors must also retain applicable dependency licenses and notices;
+see [third-party notices](THIRD_PARTY_NOTICES.md).

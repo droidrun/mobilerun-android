@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.1.0
 
 - Device streaming with automatic reconnection and codec selection.
 - Remote touch, mouse, keyboard, clipboard and Android navigation input.
