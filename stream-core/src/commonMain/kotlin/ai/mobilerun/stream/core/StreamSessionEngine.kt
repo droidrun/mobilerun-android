@@ -23,9 +23,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,6 +81,7 @@ internal const val CREDENTIALS_POLL_INTERVAL_MS: Long = 3_000
  * @param nowMs a monotonic millisecond clock; tests pass the virtual clock.
  * @param newSessionId creates the session id of a connection attempt.
  * @param logger optional diagnostics.
+ * @param warn receives one-time deprecation notices for the host to surface (for example `Log.w`).
  */
 @InternalStreamApi
 public class StreamSessionEngine(
@@ -88,6 +93,7 @@ public class StreamSessionEngine(
     private val nowMs: () -> Long = monotonicMillis(),
     private val newSessionId: () -> String = ::randomSessionId,
     private val logger: StreamLogger? = null,
+    private val warn: (String) -> Unit = {},
 ) {
     private val engineJob = SupervisorJob(scope.coroutineContext[Job])
     private val serial: CoroutineDispatcher = serialDispatcher(scope)
@@ -98,6 +104,17 @@ public class StreamSessionEngine(
 
     /** The connection status. */
     public val status: StateFlow<StreamStatus> = mutableStatus.asStateFlow()
+
+    private val mutableErrors = MutableSharedFlow<StreamError>(
+        extraBufferCapacity = ERROR_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * One [StreamError] per failed connection attempt, with the reason, the attempt number and
+     * whether retrying stopped. Hot, no replay: collect before [start] to see every error.
+     */
+    public val errors: SharedFlow<StreamError> = mutableErrors.asSharedFlow()
 
     private val controller = StreamReconnectController(
         onRemount = ::remount,
@@ -118,6 +135,11 @@ public class StreamSessionEngine(
     private var latestTarget: StreamCredentials? = null
     private var activeTarget: StreamCredentials? = null
     private var credentialsJob: Job? = null
+
+    // Why the failure that is being handed to the controller happened; read by onSnapshot, which the
+    // controller calls synchronously, and cleared right after.
+    private var failureReason: StreamErrorReason? = null
+    private var warnedStaticToken = false
 
     @Volatile private var connection: Connection? = null
     private var pendingOpenUrl: String? = null
@@ -245,11 +267,31 @@ public class StreamSessionEngine(
 
     private fun onSnapshot(snapshot: StreamReconnectSnapshot) {
         if (closed) return
-        mutableStatus.value = snapshot.toStatus()
+        mutableStatus.value = snapshot.toStatus(afterDrop = failureReason == StreamErrorReason.Disconnected)
+        reportError(snapshot)
         if (snapshot.status == StreamReconnectStatus.Unavailable) releaseConnection()
         log("status ${snapshot.status} attempt=${snapshot.attempt}")
         // A target change that was held back may be applicable now.
         engineScope.launchGuarded { applyPendingTarget() }
+    }
+
+    // A failed attempt is a snapshot of Reconnecting with attempt >= 1 or of Unavailable; a fresh
+    // cycle (attempt 0) and every other transition are not failures.
+    private fun reportError(snapshot: StreamReconnectSnapshot) {
+        val final = snapshot.status == StreamReconnectStatus.Unavailable
+        if (!final && !(snapshot.status == StreamReconnectStatus.Reconnecting && snapshot.attempt >= 1)) return
+        val reason = failureReason ?: StreamErrorReason.Unknown
+        mutableErrors.tryEmit(StreamError(reason, reason.diagnostic(), snapshot.attempt, final))
+    }
+
+    /** Runs a controller failure signal, labelling the error it may emit with [reason]. */
+    private inline fun withFailureReason(reason: StreamErrorReason, signal: () -> Unit) {
+        failureReason = reason
+        try {
+            signal()
+        } finally {
+            failureReason = null
+        }
     }
 
     private fun applyPendingTarget() {
@@ -314,6 +356,7 @@ public class StreamSessionEngine(
         // The attempt failed (startup, socket end, negotiation, peer failed or closed): nothing it
         // reports afterwards may cancel the rebuild the failure scheduled.
         private var failed = false
+        private var everOpened = false
         private var providerJob: Deferred<String>? = null
         private var handshakeTimer: Job? = null
         private var restartRecheck: Job? = null
@@ -337,12 +380,13 @@ public class StreamSessionEngine(
         fun start() {
             val provider = target.tokenProvider
             if (provider == null) {
+                warnStaticToken(target)
                 openSocket(target)
                 return
             }
             if (!isSecureProviderEndpoint(target.url)) {
                 log("token provider endpoint rejected")
-                fail(releaseImmediately = true)
+                fail(StreamErrorReason.CredentialsUnavailable, releaseImmediately = true)
                 return
             }
             val pending = startTokenProvider(scope.coroutineContext + providerDispatcher, provider)
@@ -353,20 +397,20 @@ public class StreamSessionEngine(
                 } catch (_: TimeoutCancellationException) {
                     if (!isCurrent) return@launchGuarded
                     log("token provider timeout")
-                    fail(releaseImmediately = true)
+                    fail(StreamErrorReason.CredentialsUnavailable, releaseImmediately = true)
                     return@launchGuarded
                 } catch (_: Exception) {
                     // Includes a provider's own cancellation; a cancelled attempt is already stale.
                     if (!isCurrent) return@launchGuarded
                     log("token provider failed")
-                    fail(releaseImmediately = true)
+                    fail(StreamErrorReason.CredentialsUnavailable, releaseImmediately = true)
                     return@launchGuarded
                 }
                 providerJob = null
                 if (!isCurrent) return@launchGuarded
                 if (key.isBlank()) {
                     log("token provider failed")
-                    fail(releaseImmediately = true)
+                    fail(StreamErrorReason.CredentialsUnavailable, releaseImmediately = true)
                     return@launchGuarded
                 }
                 openSocket(StreamCredentials(target.url, key))
@@ -385,13 +429,13 @@ public class StreamSessionEngine(
                 ws = opened
             } catch (e: Exception) {
                 log("signalling open failed: ${e::class.simpleName}")
-                fail()
+                fail(StreamErrorReason.ConnectionRefused)
                 return
             }
             handshakeTimer = scope.launchGuarded {
                 delay(SignallingTiming.WS_OPEN_TIMEOUT_MS)
                 log("websocket open timeout")
-                fail()
+                fail(StreamErrorReason.ConnectionRefused)
             }
             // Armed at socket allocation: ticks before the socket is open are skipped.
             scope.launchGuarded {
@@ -400,6 +444,13 @@ public class StreamSessionEngine(
                     if (isCurrent && wsOpen && hostVisible) send(ClientMessage.KeepAlive(sessionId))
                 }
             }
+        }
+
+        // The static token path is deprecated: one notice per session, never the token itself.
+        private fun warnStaticToken(credentials: StreamCredentials) {
+            if (credentials.token.isEmpty() || warnedStaticToken) return
+            warnedStaticToken = true
+            runCatching { warn(STATIC_TOKEN_WARNING) }
         }
 
         fun release() {
@@ -432,13 +483,17 @@ public class StreamSessionEngine(
         fun sendHover(bytes: ByteArray): Boolean = !released && peer?.sendHover(bytes) == true
 
         // A failure of this attempt: the reconnect controller decides what happens next.
-        private fun fail(releaseImmediately: Boolean = false) {
+        private fun fail(reason: StreamErrorReason, releaseImmediately: Boolean = false) {
             if (!isCurrent || failed) return
             failed = true
             handshakeTimer?.cancel()
             if (releaseImmediately) releaseConnection()
-            controller.handleFailure()
+            withFailureReason(reason) { controller.handleFailure() }
         }
+
+        // The socket ending is a refusal until it opened once, and a drop afterwards.
+        private val socketEndReason: StreamErrorReason
+            get() = if (everOpened) StreamErrorReason.Disconnected else StreamErrorReason.ConnectionRefused
 
         private fun post(block: suspend () -> Unit) {
             scope.launchGuarded { if (isCurrent) block() }
@@ -449,12 +504,13 @@ public class StreamSessionEngine(
         override fun onOpen() = post {
             if (failed) return@post
             wsOpen = true
+            everOpened = true
             handshakeTimer?.cancel()
             send(ClientMessage.RequestRtcConfiguration(sessionId))
             handshakeTimer = scope.launchGuarded {
                 delay(SignallingTiming.RTC_CONFIG_TIMEOUT_MS)
                 log("rtcConfiguration timeout")
-                fail()
+                fail(StreamErrorReason.Unknown)
             }
         }
 
@@ -463,20 +519,21 @@ public class StreamSessionEngine(
         override fun onClosed(code: Int) = post {
             wsOpen = false
             if (code == GOING_AWAY) {
+                val reason = socketEndReason
                 releaseConnection()
-                controller.handleFailure()
+                withFailureReason(reason) { controller.handleFailure() }
                 return@post
             }
             if (failed) return@post
             log("websocket closed")
-            fail()
+            fail(socketEndReason)
         }
 
         override fun onFailure(httpStatus: Int?) = post {
             wsOpen = false
             if (failed) return@post
             log("websocket failed http=$httpStatus")
-            fail()
+            fail(if (httpStatus == HTTP_UNAUTHORIZED && !everOpened) StreamErrorReason.TokenRejected else socketEndReason)
             if (httpStatus == HTTP_UNAUTHORIZED || httpStatus == HTTP_FORBIDDEN) requestCredentialRefresh()
         }
 
@@ -486,7 +543,7 @@ public class StreamSessionEngine(
                 ServerFrame.Ignored -> Unit
                 ServerFrame.StartupFailure -> {
                     log("invalid message while awaiting rtcConfiguration")
-                    fail()
+                    fail(StreamErrorReason.Unknown)
                 }
                 is ServerFrame.Message -> handle(frame.message)
             }
@@ -521,7 +578,7 @@ public class StreamSessionEngine(
             val servers = message.iceServers
             if (servers == null && message.configuration?.containsKey("iceServers") == true) {
                 log("malformed ice servers")
-                fail()
+                fail(StreamErrorReason.Unknown)
                 return
             }
             try {
@@ -543,7 +600,7 @@ public class StreamSessionEngine(
                 throw e
             } catch (e: Exception) {
                 log("negotiation failed: ${e::class.simpleName}")
-                fail()
+                fail(StreamErrorReason.Unknown)
             }
         }
 
@@ -652,7 +709,7 @@ public class StreamSessionEngine(
             log("peer connection $state")
             when {
                 failed -> Unit
-                state == PeerConnectionState.Failed || state == PeerConnectionState.Closed -> fail()
+                state == PeerConnectionState.Failed || state == PeerConnectionState.Closed -> fail(StreamErrorReason.Disconnected)
                 state == PeerConnectionState.Connected -> {
                     iceRestartGraceUntil = 0
                     restartRecheck?.cancel()
@@ -664,7 +721,7 @@ public class StreamSessionEngine(
                 else -> {
                     restartRecheck?.cancel()
                     restartRecheck = null
-                    controller.handleDisconnected()
+                    withFailureReason(StreamErrorReason.Disconnected) { controller.handleDisconnected() }
                 }
             }
         }
@@ -682,7 +739,7 @@ public class StreamSessionEngine(
                 }
                 if (watched.connectionState == PeerConnectionState.Connected) return@launchGuarded
                 log("ICE-restart grace expired")
-                controller.handleDisconnected()
+                withFailureReason(StreamErrorReason.Disconnected) { controller.handleDisconnected() }
             }
         }
     }
@@ -691,6 +748,10 @@ public class StreamSessionEngine(
         const val GOING_AWAY = 1001
         const val HTTP_UNAUTHORIZED = 401
         const val HTTP_FORBIDDEN = 403
+        const val ERROR_BUFFER = 16
+        const val STATIC_TOKEN_WARNING =
+            "StreamCredentials.token is deprecated and reused on every reconnect, so it cannot carry " +
+                "single-use stream keys. Pass tokenProvider and mint a fresh key per connection."
     }
 }
 

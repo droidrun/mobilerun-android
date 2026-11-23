@@ -21,23 +21,31 @@ public sealed interface StreamStatus {
      *
      * @property attempt 1-based number of the upcoming (or in-flight) reconnect attempt; 0 right after
      *   `retry()` or `handleWake()` started a fresh cycle.
+     * @property afterDrop `true` when the failure that caused this reconnect was an open session that
+     *   dropped, as opposed to an attempt that never opened. Default UIs show their `disconnected` text for it.
      */
-    public class Reconnecting internal constructor(public val attempt: Int) : StreamStatus {
-        override fun equals(other: Any?): Boolean = other is Reconnecting && other.attempt == attempt
+    public class Reconnecting internal constructor(
+        public val attempt: Int,
+        public val afterDrop: Boolean,
+    ) : StreamStatus {
+        internal constructor(attempt: Int) : this(attempt, false)
 
-        override fun hashCode(): Int = attempt
+        override fun equals(other: Any?): Boolean =
+            other is Reconnecting && other.attempt == attempt && other.afterDrop == afterDrop
 
-        override fun toString(): String = "Reconnecting(attempt=$attempt)"
+        override fun hashCode(): Int = 31 * attempt + afterDrop.hashCode()
+
+        override fun toString(): String = "Reconnecting(attempt=$attempt, afterDrop=$afterDrop)"
     }
 
     /** The retry budget is spent; `retry()` or `handleWake()` starts a new cycle. */
     public data object Unavailable : StreamStatus
 }
 
-internal fun StreamReconnectSnapshot.toStatus(): StreamStatus = when (status) {
+internal fun StreamReconnectSnapshot.toStatus(afterDrop: Boolean = false): StreamStatus = when (status) {
     StreamReconnectStatus.Connecting -> StreamStatus.Connecting
     StreamReconnectStatus.Connected -> StreamStatus.Connected
-    StreamReconnectStatus.Reconnecting -> StreamStatus.Reconnecting(attempt)
+    StreamReconnectStatus.Reconnecting -> StreamStatus.Reconnecting(attempt, afterDrop)
     StreamReconnectStatus.Unavailable -> StreamStatus.Unavailable
 }
 

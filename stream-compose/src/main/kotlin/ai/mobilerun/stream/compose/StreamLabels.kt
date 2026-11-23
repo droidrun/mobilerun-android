@@ -7,7 +7,11 @@ import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.StreamStatus
 import androidx.compose.runtime.Immutable
 
-/** All stream chrome strings. Placeholders use {attempt} and {max}; caller labels are never translated. */
+/**
+ * All stream chrome strings. Placeholders use {attempt} and {max}; caller labels are never translated.
+ * [disconnected] shows for the first reconnect after an open session dropped; every other reconnect
+ * uses [reconnecting] or [reconnectingAttempt].
+ */
 @Immutable
 public class StreamLabels(
     public val connecting: String = "connecting",
@@ -18,6 +22,7 @@ public class StreamLabels(
     public val back: String = "Back",
     public val home: String = "Home",
     public val recent: String = "Recent",
+    public val disconnected: String = "disconnected",
 ) {
     override fun equals(other: Any?): Boolean =
         other is StreamLabels &&
@@ -28,7 +33,8 @@ public class StreamLabels(
             retry == other.retry &&
             back == other.back &&
             home == other.home &&
-            recent == other.recent
+            recent == other.recent &&
+            disconnected == other.disconnected
 
     override fun hashCode(): Int {
         var result = connecting.hashCode()
@@ -39,13 +45,14 @@ public class StreamLabels(
         result = 31 * result + back.hashCode()
         result = 31 * result + home.hashCode()
         result = 31 * result + recent.hashCode()
+        result = 31 * result + disconnected.hashCode()
         return result
     }
 
     override fun toString(): String =
         "StreamLabels(connecting=$connecting, reconnecting=$reconnecting, " +
         "reconnectingAttempt=$reconnectingAttempt, unavailable=$unavailable, retry=$retry, " +
-        "back=$back, home=$home, recent=$recent)"
+        "back=$back, home=$home, recent=$recent, disconnected=$disconnected)"
 
     /** Creates a value with selected properties replaced. */
     public fun copy(
@@ -57,8 +64,9 @@ public class StreamLabels(
         back: String = this.back,
         home: String = this.home,
         recent: String = this.recent,
+        disconnected: String = this.disconnected,
     ): StreamLabels = StreamLabels(
-        connecting, reconnecting, reconnectingAttempt, unavailable, retry, back, home, recent,
+        connecting, reconnecting, reconnectingAttempt, unavailable, retry, back, home, recent, disconnected,
     )
 }
 
@@ -145,7 +153,8 @@ public class TaskApprovalLabels(
 }
 
 internal fun StreamLabels.statusLabel(status: StreamStatus): String = when (status) {
-    is StreamStatus.Reconnecting -> if (status.attempt > 1) {
+    is StreamStatus.Reconnecting -> if (status.afterDrop && status.attempt <= 1) disconnected
+    else if (status.attempt > 1) {
         reconnectingAttempt.replace("{attempt}", status.attempt.toString())
             .replace("{max}", ReconnectPolicy.MAX_ATTEMPTS.toString())
     } else reconnecting

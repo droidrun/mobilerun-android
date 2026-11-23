@@ -63,6 +63,7 @@ internal class Harness(
     /** While set, the provider suspends until it completes (a slow credentials request). */
     var gate: CompletableDeferred<Unit>? = null
     val log = mutableListOf<String>()
+    val warnings = mutableListOf<String>()
 
     /** The scope the app hands to the engine; cancelling it must release everything, like close(). */
     val host = CoroutineScope(hostContext + Job(scope.backgroundScope.coroutineContext[Job]))
@@ -82,6 +83,7 @@ internal class Harness(
         nowMs = { scope.currentTime },
         newSessionId = { sessionId },
         logger = { log += it },
+        warn = { warnings += it },
     )
 
     val socket get() = signalling.sockets.last()
@@ -348,7 +350,7 @@ class StreamSessionEngineTest {
             h.settle()
             oldSocket.serverCloses(1001)
             h.settle()
-            assertEquals(StreamStatus.Reconnecting(1), h.status)
+            assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
             assertTrue(oldPeer.isClosed)
             assertTrue(oldSocket.isClosed)
             assertFalse(h.engine.sendControl(byteArrayOf(1)))
@@ -356,7 +358,7 @@ class StreamSessionEngineTest {
             assertFailsWith<StreamDisconnectedException> { screenshot.await().getOrThrow() }
             oldPeer.emitState(PeerConnectionState.Connected)
             h.settle()
-            assertEquals(StreamStatus.Reconnecting(1), h.status)
+            assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
             h.advance(999)
             assertEquals(1, h.signalling.sockets.size)
             h.advance(1)
@@ -375,14 +377,14 @@ class StreamSessionEngineTest {
         val oldSocket = h.socket
         oldPeer.emitState(PeerConnectionState.Failed)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         assertFalse(oldPeer.isClosed)
         oldSocket.serverCloses(1001)
         h.settle()
         assertTrue(oldPeer.isClosed)
         assertTrue(oldSocket.isClosed)
         assertFalse(h.engine.sendControl(byteArrayOf(1)))
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         assertEquals(1, h.log.count { it == "status Reconnecting attempt=1" })
         h.advance(999)
         assertEquals(1, h.signalling.sockets.size)
@@ -398,7 +400,7 @@ class StreamSessionEngineTest {
         h.socket.serverCloses(1006)
         h.settle()
         assertFalse(old.isClosed)
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         h.advance(1_000)
         assertTrue(old.isClosed)
     }
@@ -694,7 +696,7 @@ class StreamSessionEngineTest {
         h.settle()
         // Even though the peer connection still says connected: the bridge ended the session.
         assertEquals(PeerConnectionState.Connected, firstPeer.connectionState)
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         assertEquals(2, h.credentialCalls) // start + heal
 
         h.advance(ReconnectPolicy.delayMs(1, 0.5) - 1)
@@ -722,12 +724,12 @@ class StreamSessionEngineTest {
         val doomed = h.socket
         doomed.serverCloses()
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
 
         // The peer connection of the doomed attempt still gets there before the backoff ends.
         h.peer.emitState(PeerConnectionState.Connected)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         h.advance(ReconnectPolicy.delayMs(1, 0.5))
         assertEquals(2, h.signalling.sockets.size) // the rebuild still happened
         assertTrue(doomed.isClosed)
@@ -750,7 +752,7 @@ class StreamSessionEngineTest {
         val firstSocket = h.socket
         h.peer.emitState(PeerConnectionState.Failed)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         h.advance(ReconnectPolicy.delayMs(1, 0.5))
         assertEquals(2, h.signalling.sockets.size)
         assertTrue(firstSocket.isClosed)
@@ -773,7 +775,7 @@ class StreamSessionEngineTest {
         h.connect()
         h.peer.emitState(PeerConnectionState.Disconnected)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test
@@ -798,10 +800,10 @@ class StreamSessionEngineTest {
         oldPeer.emitState(PeerConnectionState.Failed)
         oldSocket.serverCloses()
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
         h.advance(1_000)
         // The second attempt is still running; the stale signals did not count as a new failure.
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test
@@ -997,7 +999,7 @@ class StreamSessionEngineTest {
         assertEquals(3, h.signalling.sockets.size)
         assertTrue(running.isClosed)
         assertEquals("token-b", h.socket.credentials.token)
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test
@@ -1062,7 +1064,7 @@ class StreamSessionEngineTest {
         h.advance(SignallingTiming.ICE_RESTART_GRACE_MS - 1)
         assertEquals(StreamStatus.Connected, h.status)
         h.advance(1)
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test
@@ -1073,7 +1075,7 @@ class StreamSessionEngineTest {
         h.settle()
         h.peer.emitState(PeerConnectionState.Failed)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test
@@ -1108,7 +1110,7 @@ class StreamSessionEngineTest {
         // No grace window was opened.
         h.peer.emitState(PeerConnectionState.Disconnected)
         h.settle()
-        assertEquals(StreamStatus.Reconnecting(1), h.status)
+        assertEquals(StreamStatus.Reconnecting(1, afterDrop = true), h.status)
     }
 
     @Test

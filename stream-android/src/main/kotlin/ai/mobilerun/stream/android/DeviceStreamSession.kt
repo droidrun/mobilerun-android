@@ -7,6 +7,7 @@ import ai.mobilerun.stream.core.PeerTransportFactory
 import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
 import ai.mobilerun.stream.core.StreamCredentialsProvider
+import ai.mobilerun.stream.core.StreamError
 import ai.mobilerun.stream.core.StreamSessionEngine
 import ai.mobilerun.stream.core.StreamStats
 import ai.mobilerun.stream.core.StreamStatus
@@ -15,10 +16,12 @@ import ai.mobilerun.stream.core.serialDispatcher
 import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.OkHttpClient
@@ -36,7 +39,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * connection drops it rebuilds itself with exponential backoff and asks the
  * [credentials] provider for fresh credentials. After [ReconnectPolicy.MAX_ATTEMPTS] failed attempts
  * it reports
- * [StreamStatus.Unavailable] until [retry] or [handleWake] is called. It has no Android lifecycle coupling: the
+ * [StreamStatus.Unavailable] until [retry] or [handleWake] is called. Every failed attempt is also
+ * reported on [errors] with a reason. It has no Android lifecycle coupling: the
  * app decides when to [start] and [close].
  *
  * **Threading.** Pass a [scope] on a background dispatcher (for example `Dispatchers.Default`): the
@@ -116,6 +120,7 @@ public class DeviceStreamSession internal constructor(
             }
         },
         logger = logger,
+        warn = { Log.w(LOG_TAG, it) },
     )
 
     private val sampler = StreamStatsSampler(worker, engine.status, visible) { parser ->
@@ -133,6 +138,12 @@ public class DeviceStreamSession internal constructor(
 
     /** The connection status. */
     public val status: StateFlow<StreamStatus> get() = engine.status
+
+    /**
+     * One [StreamError] per failed connection attempt: the reason, the attempt number and whether
+     * the session stopped retrying. Hot with no replay; collect it before [start] to see every error.
+     */
+    public val errors: SharedFlow<StreamError> get() = engine.errors
 
     /** Size and rotation of the received video; `null` until the first frame and while reconnecting. */
     public val videoSize: StateFlow<VideoSize?> get() = media.videoSize
@@ -211,6 +222,7 @@ public class DeviceStreamSession internal constructor(
     ): ByteArray = engine.screenshot(timeout)
 
     private companion object {
+        const val LOG_TAG = "MobilerunStream"
         val defaultHttpClient: OkHttpClient by lazy { OkHttpClient() }
     }
 }
