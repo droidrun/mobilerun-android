@@ -1,75 +1,81 @@
-# Releasing a git tag through JitPack
+# Releasing to Maven Central
 
-Version `v0.1.0` is a git release, consumed through JitPack. Creating a GitHub Release is optional;
-JitPack builds from the git tag. The repository must be public for anonymous installation.
-Repository visibility, tag creation and the release announcement are separate owner decisions.
+Release `0.1.0` uses Maven Central under group `ai.mobilerun`. The PR workflow builds unsigned
+publications in Maven Local and never uploads to Central. After release approval, tag `v0.1.0`
+on the selected commit on `main` to start a signed Central upload; publication requires a separate
+approval in the Central Portal.
 
-## Prepare the release commit
+## One-time setup
 
-1. Update the README and package guide to the intended tag, and finalize its changelog entry.
-   Review [third-party notices](THIRD_PARTY_NOTICES.md), dependency versions and redistribution
-   requirements. Do not claim a JitPack build has succeeded until its published artifacts resolve.
+The repository owner must complete these steps before the first release:
+
+1. Create a [Central Portal account](https://central.sonatype.com/) and register `ai.mobilerun`.
+   Verify ownership of `mobilerun.ai` by adding the DNS TXT record requested by the portal.
+2. Generate a password-protected GPG signing key (`gpg --full-generate-key`). Publish its **public**
+   key to a supported keyserver, such as `keyserver.ubuntu.com`, so Central can verify signatures.
+   Keep the private key and its password in a password manager.
+3. Generate a Central Portal **user token**. Its username/password are publishing credentials,
+   distinct from the account login.
+4. Add the four values under Settings → Secrets and variables → Actions; never commit them.
+
+   | Secret | Value |
+   |---|---|
+   | `MAVEN_CENTRAL_USERNAME` | Central Portal user-token username |
+   | `MAVEN_CENTRAL_PASSWORD` | Central Portal user-token password |
+   | `SIGNING_IN_MEMORY_KEY` | Complete ASCII-armored private GPG key, including header/footer |
+   | `SIGNING_IN_MEMORY_KEY_PASSWORD` | GPG private-key password |
+
+5. Recommended: create a protected `maven-central` environment with a release-tag rule and a
+   required reviewer. Set `environment: maven-central` on the upload job when that environment is
+   configured, and store its publishing secrets there to require approval before upload.
+6. Decide whether to make the repository public. Repository visibility is the owner's decision,
+   not a Maven Central requirement. Ensure the published POM's project/license/SCM links are suitable.
+
+Missing secrets cause the tag workflow to fail before any build or upload. Do not push a release tag
+until namespace ownership and signing are ready.
+
+## Each release
+
+1. Set `VERSION_NAME` in `gradle.properties` to a release version such as `0.1.0` (no `-SNAPSHOT`).
+   All modules use this single version. Update the README installation examples to match.
+   Keep the README and package guide aligned with Maven Central coordinates and retain the
+   applicable [third-party notices](THIRD_PARTY_NOTICES.md).
+   Finalize the `CHANGELOG.md` 0.1.0 entry with the release date and review its feature list.
 2. For deliberate public API changes, run `./gradlew apiDump`, inspect the dump diff and commit it
-   with the change. `check` compares signatures with the committed baseline; declarations marked
-   `InternalStreamApi` are excluded from that contract.
-3. With JDK 17 and Android SDK 36 installed, run:
+   with the change. `check` compares public signatures with the committed baseline.
+   Declarations marked `InternalStreamApi` are excluded from this contract.
+3. Run `./gradlew check :sample:assembleDebug publishToMavenLocal -PsignAllPublications=false`.
+   Inspect the artifacts under the Maven Local `ai/mobilerun` group. Merge the release-version PR
+   only after CI and its unsigned publication dry run pass.
+4. From the merged commit on `main`, create and push the matching tag:
 
    ```sh
-   ./gradlew check :sample:assembleDebug --no-daemon
-   ./gradlew publishToMavenLocal \
-     -PGROUP=com.github.droidrun.mobilerun-android \
-     -PVERSION_NAME=v0.1.0 -PsignAllPublications=false
+   git tag v0.1.0
+   git push origin v0.1.0
    ```
 
-   Inspect every POM and `.module` file under the corresponding Maven Local group. All intermodule
-   dependencies must use the same group and tag version, including the JVM variants. Resolve
-   `mobilerun-stream-compose` from Maven Local in a separate Android consumer to check transitive
-   metadata. The normal PR workflow also checks unsigned publications with the development coordinates.
-4. Merge the preparation PR only after CI is green. Select the exact green commit on `main`.
-   Before making the repository public, verify release-tag protections, repository permissions and
-   private vulnerability reporting, and review repository metadata and history for public suitability.
+   The workflow rejects a tag that differs from `VERSION_NAME` or contains a snapshot/prerelease
+   version. It checks the API, tests and lint, signs all publications, then runs
+   `./gradlew publishToMavenCentral` to upload and validate without automatically releasing.
+5. Check the Actions run and inspect the validated deployment in the Central Portal, including its
+   coordinates, signatures and artifacts. Press **Publish** in the Central Portal when satisfied.
+   Central may take time to index the release; verify resolution from `mavenCentral()` before
+   announcing it. Published versions are immutable; diagnose failed uploads before retrying.
+   Later releases may switch to `publishAndReleaseToMavenCentral` for automatic publication.
 
-## Create and verify the tag
-
-Only after release approval, create the tag at the selected commit and push it:
-
-```sh
-git tag v0.1.0 <release-commit>
-git push origin v0.1.0
-```
-
-Treat release tags as immutable: fix a failed release in a new commit and version rather than moving
-a published tag. Tag publication makes that source revision consumable immediately.
-
-Request the tag build at [JitPack](https://jitpack.io/#droidrun/mobilerun-android/v0.1.0) and inspect its
-build log and artifact listing. `jitpack.yml` selects JDK 17, installs Android platform 36/build tools
-36.0.0, and publishes unsigned artifacts with group `com.github.droidrun.mobilerun-android`. JitPack's
-`VERSION` environment variable supplies the requested git tag as `VERSION_NAME`; the development
-`VERSION_NAME` in `gradle.properties` does not need to be changed to create the tag.
-
-Verify a clean external Android app can resolve the [README install snippet](README.md#install)
-from JitPack, including transitive dependencies. Test both Compose and View-only consumers before
-announcing the release. Maven Local verification does not prove that JitPack's remote build image or
-anonymous artifact resolution works. A GitHub Release may then link to the changelog and install guide.
+6. Set `VERSION_NAME` to the next development version ending in `-SNAPSHOT` in a follow-up PR.
 
 ## Coordinates and artifacts
 
-All entries below use version `v0.1.0` for this release.
-
-| Module | Maven coordinate (append `:v0.1.0`) | Packaging |
+| Module | Maven coordinate (append `:<version>`) | Packaging |
 |---|---|---|
-| `:protocol` | `com.github.droidrun.mobilerun-android:mobilerun-stream-protocol` | Kotlin Multiplatform metadata + `-jvm` JAR |
-| `:stream-core` | `com.github.droidrun.mobilerun-android:mobilerun-stream-core` | Kotlin Multiplatform metadata + `-jvm` JAR |
-| `:stream-android` | `com.github.droidrun.mobilerun-android:mobilerun-stream-android` | release AAR, minSdk 24 |
-| `:stream-compose` | `com.github.droidrun.mobilerun-android:mobilerun-stream-compose` | release AAR, minSdk 24 |
+| `:protocol` | `ai.mobilerun:mobilerun-stream-protocol` | Kotlin Multiplatform metadata + `-jvm` JAR |
+| `:stream-core` | `ai.mobilerun:mobilerun-stream-core` | Kotlin Multiplatform metadata + `-jvm` JAR |
+| `:stream-android` | `ai.mobilerun:mobilerun-stream-android` | release AAR, minSdk 24 |
+| `:stream-compose` | `ai.mobilerun:mobilerun-stream-compose` | release AAR, minSdk 24 |
 
-Gradle consumers use unsuffixed coordinates and select the JVM/Android variant through Gradle module
-metadata. JVM-only Maven consumers use the `-jvm` coordinates for protocol/core. Each publication
-includes a POM, sources and a javadoc JAR (the JVM modules use an empty placeholder).
+Gradle consumers use the unsuffixed coordinates and select the JVM/Android variant through Gradle
+module metadata. JVM-only Maven consumers use the `-jvm` coordinates for protocol/core. Each
+publication includes a POM, sources and a javadoc JAR (the JVM modules use an empty placeholder).
 The Android AAR includes WebRTC consumer keep rules; OkHttp supplies its own consumer rules.
-
-## Registry publishing
-
-No registry upload is part of this git release. The retained Maven Central workflow is manual-only
-and does not run on `v*` tag pushes. It still requires its existing release-version and signing
-prerequisites; do not dispatch it as part of the JitPack checklist.
+The plugin uses the Central Portal API, not the retired OSSRH staging service.

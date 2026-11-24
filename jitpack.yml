@@ -1,6 +1,0 @@
-jdk:
-  - openjdk17
-before_install:
-  - sdkmanager "platforms;android-36" "build-tools;36.0.0"
-install:
-  - ./gradlew publishToMavenLocal -PGROUP=com.github.droidrun.mobilerun-android -PVERSION_NAME="$VERSION" -PsignAllPublications=false

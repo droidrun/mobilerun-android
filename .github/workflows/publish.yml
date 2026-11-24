@@ -1,7 +1,8 @@
-name: Maven Central publishing (manual)
+name: Maven publishing
 
 on:
-  workflow_dispatch:
+  push:
+    tags: ['v*']
 
 permissions:
   contents: read
