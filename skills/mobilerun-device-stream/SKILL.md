@@ -17,41 +17,32 @@ the planned Maven coordinates are published; check [package docs](../../docs/pac
 
 Authenticate the app user and authorize access to the requested device on your
 backend before minting. Keep `MOBILERUN_API_KEY` in the server environment only.
-Call `POST https://api.mobilerun.ai/v1/identity/stream-keys` with bearer API-key
-authentication and JSON `{deviceId, ttlSeconds, allowedOrigins?}`. The response
-is `{key, keyId, expiresAt}`. Tokens start with `dr_st_`, are single-use and have
-a default TTL of 120 seconds. `allowedOrigins` binds browser use to the listed
-sites; it does not replace user/device authorization for a native app.
+Use `@mobilerun/sdk@6.3.0` in a Node server handler after authorization:
 
-For example, in a Kotlin/JVM **server** handler after authorization (using
-`kotlinx.serialization` for JSON):
+```js
+import { MobilerunSDK } from '@mobilerun/sdk';
 
-```kotlin
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-
-val apiKey = requireNotNull(System.getenv("MOBILERUN_API_KEY"))
-val body = buildJsonObject {
-    put("deviceId", deviceId) // authorized device ID from your handler
-    put("ttlSeconds", 120)
-}
-val request = HttpRequest.newBuilder(
-    URI.create("https://api.mobilerun.ai/v1/identity/stream-keys")
-).header("Authorization", "Bearer $apiKey")
-    .header("Content-Type", "application/json")
-    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-    .build()
-val response = HttpClient.newHttpClient().send(
-    request, HttpResponse.BodyHandlers.ofString()
-)
-check(response.statusCode() == 201) { "Stream token mint failed" }
-// Return only key, keyId and expiresAt to the authorized app, with
-// Cache-Control: no-store. Do not log the response body.
+// Node server only. Authenticate the user and authorize this device before minting.
+const client = new MobilerunSDK({
+  apiKey: process.env.MOBILERUN_API_KEY,
+  maxRetries: 0,
+});
+const allowedOrigins = ['https://app.example.com']; // optional browser origin policy
+const { key, keyId, expiresAt } = await client.streamTokens.create({
+  deviceId,
+  ttlSeconds: 120,
+  allowedOrigins,
+});
+res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+res.end(JSON.stringify({ key, keyId, expiresAt }));
 ```
+
+The response is `{key, keyId, expiresAt}`. Tokens start with `dr_st_`, are single-use
+and have a default TTL of 120 seconds. `allowedOrigins` is optional and binds browser
+use to the listed sites; it does not replace native user/device authorization.
+Revoke an unused token on the server with `await client.streamTokens.delete(keyId)`.
+
+REST fallback: `POST /v1/identity/stream-keys` with bearer API-key authentication on the server.
 
 Do not cache tokens or automatically retry mint requests. A token is consumed
 at admission even if the downstream WebSocket upgrade fails. The app's backend
