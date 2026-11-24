@@ -20,6 +20,21 @@ public enum class StreamErrorReason {
     /** Reserved: the server said the device is offline. The signalling protocol has no such message yet. */
     DeviceUnavailable,
 
+    /** The server refused local media publication. */
+    PublishNotAllowed,
+    /** Device, negotiation or carrier cannot publish. */
+    PublishUnsupported,
+    /** The host has not granted capture permission. */
+    PermissionDenied,
+    /** Another publisher holds the device lease. */
+    PublishBusy,
+    /** Capture, attachment or device injection failed. */
+    PublishFailed,
+    /** Accepted publication never became active. */
+    PublishTimeout,
+    /** Explicit cancellation of a pending start (never emitted on errors). */
+    PublishCancelled,
+
     /** None of the above. */
     Unknown,
 }
@@ -39,16 +54,25 @@ public class StreamError internal constructor(
     public val message: String,
     public val attempt: Int,
     public val final: Boolean,
+    public val operation: String? = null,
+    public val mediaSessionId: String? = null,
+    public val detail: String? = null,
+    public val serverReason: String? = null,
 ) {
     override fun equals(other: Any?): Boolean =
         other is StreamError && other.reason == reason && other.message == message &&
-            other.attempt == attempt && other.final == final
+            other.attempt == attempt && other.final == final && other.operation == operation &&
+            other.mediaSessionId == mediaSessionId && other.detail == detail && other.serverReason == serverReason
 
     override fun hashCode(): Int {
         var result = reason.hashCode()
         result = 31 * result + message.hashCode()
         result = 31 * result + attempt
         result = 31 * result + final.hashCode()
+        result = 31 * result + (operation?.hashCode() ?: 0)
+        result = 31 * result + (mediaSessionId?.hashCode() ?: 0)
+        result = 31 * result + (detail?.hashCode() ?: 0)
+        result = 31 * result + (serverReason?.hashCode() ?: 0)
         return result
     }
 
@@ -61,5 +85,16 @@ internal fun StreamErrorReason.diagnostic(): String = when (this) {
     StreamErrorReason.ConnectionRefused -> "the connection closed before it opened"
     StreamErrorReason.Disconnected -> "the open connection dropped"
     StreamErrorReason.DeviceUnavailable -> "the device is not available"
+    StreamErrorReason.PublishNotAllowed -> "publishing is not allowed"
+    StreamErrorReason.PublishUnsupported -> "publishing is not supported"
+    StreamErrorReason.PermissionDenied -> "microphone or camera permission is required"
+    StreamErrorReason.PublishBusy -> "another publisher is active"
+    StreamErrorReason.PublishFailed -> "publishing failed"
+    StreamErrorReason.PublishTimeout -> "publishing did not become active"
+    StreamErrorReason.PublishCancelled -> "publishing was cancelled"
     StreamErrorReason.Unknown -> "the connection attempt failed"
 }
+
+/** Stable stream-client contract reason spelling. */
+public val StreamErrorReason.wireValue: String
+    get() = name.replace(Regex("([a-z])([A-Z])"), "$1_$2").lowercase()

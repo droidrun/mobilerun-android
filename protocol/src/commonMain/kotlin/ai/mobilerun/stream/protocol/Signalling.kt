@@ -120,6 +120,18 @@ public sealed interface ClientMessage {
         }
     }
 
+    /** Starts a correlated local-media publish operation on this viewer connection. */
+    @Serializable
+    @SerialName("publishStart")
+    @InternalStreamApi
+    public data class PublishStart(val mediaSessionId: String, val kinds: List<String>) : ClientMessage
+
+    /** Best-effort stop; no server acknowledgement is required. */
+    @Serializable
+    @SerialName("stopPublish")
+    @InternalStreamApi
+    public data class StopPublish(val mediaSessionId: String) : ClientMessage
+
     /**
      * Requests a screenshot. The reply ([ServerMessage.Screenshot] or [ServerMessage.ScreenshotError])
      * carries the same [id]. There is no session id in this message. The client gives up after
@@ -227,6 +239,16 @@ public sealed interface ServerMessage {
     public class ScreenshotError internal constructor(
         public val id: String,
         public val message: String,
+    ) : ServerMessage
+
+    /** Correlated server publication outcome. Unknown states are ignored by the controller. */
+    @Serializable
+    @SerialName("publishState")
+    @InternalStreamApi
+    public class PublishState internal constructor(
+        public val mediaSessionId: String,
+        public val state: String,
+        public val reason: String? = null,
     ) : ServerMessage
 
     /** Parser entry point. */

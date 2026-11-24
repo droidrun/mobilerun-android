@@ -24,7 +24,7 @@ class NativeStatsCaptureTest {
         lateinit var peer: WebRtcPeerTransport
         val factory = ai.mobilerun.stream.core.PeerTransportFactory { configuration, channels, listener ->
             WebRtcPeerTransportFactory({ WebRtcRuntime.factory(context) }, session.media,
-                VideoCodecPreference.Auto).create(configuration, channels, listener).also {
+                VideoCodecPreference.Auto, context, null).create(configuration, channels, listener).also {
                 peer = it
             }
         }

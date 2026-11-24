@@ -25,7 +25,15 @@ internal fun parseServerFrame(text: String, phase: SignallingPhase): ServerFrame
     }
 
     return try {
-        ServerFrame.Message(SignallingJson.decodeFromJsonElement(ServerMessage.serializer(), element))
+        val normalized = if ((element["type"] as? JsonPrimitive)?.content == "publishState") {
+            val id = element["mediaSessionId"] as? JsonPrimitive
+            val state = element["state"] as? JsonPrimitive
+            if (id?.isString != true || id.content.isEmpty() || state?.isString != true) return ServerFrame.Ignored
+            val fields = element.toMutableMap()
+            if ((element["reason"] as? JsonPrimitive)?.isString != true) fields.remove("reason")
+            JsonObject(fields)
+        } else element
+        ServerFrame.Message(SignallingJson.decodeFromJsonElement(ServerMessage.serializer(), normalized))
     } catch (_: IllegalArgumentException) {
         // Covers SerializationException: an unknown or malformed `type`, or a missing required field,
         // is dropped; an unusable initial configuration cannot create the peer connection, which

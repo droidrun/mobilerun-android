@@ -23,6 +23,16 @@ public class StreamLabels(
     public val home: String = "Home",
     public val recent: String = "Recent",
     public val disconnected: String = "disconnected",
+    public val microphone: String = "Microphone",
+    public val camera: String = "Camera",
+    public val stopMicrophone: String = "Stop microphone",
+    public val stopCamera: String = "Stop camera",
+    public val publishStarting: String = "Starting capture",
+    public val publishPermissionDenied: String = "Microphone or camera permission required",
+    public val publishNotAllowed: String = "Publishing is not allowed",
+    public val publishUnsupported: String = "Publishing is not supported",
+    public val publishFailed: String = "Publishing failed",
+
 ) {
     override fun equals(other: Any?): Boolean =
         other is StreamLabels &&
@@ -34,7 +44,16 @@ public class StreamLabels(
             back == other.back &&
             home == other.home &&
             recent == other.recent &&
-            disconnected == other.disconnected
+            disconnected == other.disconnected &&
+            microphone == other.microphone &&
+            camera == other.camera &&
+            stopMicrophone == other.stopMicrophone &&
+            stopCamera == other.stopCamera &&
+            publishStarting == other.publishStarting &&
+            publishPermissionDenied == other.publishPermissionDenied &&
+            publishNotAllowed == other.publishNotAllowed &&
+            publishUnsupported == other.publishUnsupported &&
+            publishFailed == other.publishFailed
 
     override fun hashCode(): Int {
         var result = connecting.hashCode()
@@ -46,6 +65,15 @@ public class StreamLabels(
         result = 31 * result + home.hashCode()
         result = 31 * result + recent.hashCode()
         result = 31 * result + disconnected.hashCode()
+        result = 31 * result + microphone.hashCode()
+        result = 31 * result + camera.hashCode()
+        result = 31 * result + stopMicrophone.hashCode()
+        result = 31 * result + stopCamera.hashCode()
+        result = 31 * result + publishStarting.hashCode()
+        result = 31 * result + publishPermissionDenied.hashCode()
+        result = 31 * result + publishNotAllowed.hashCode()
+        result = 31 * result + publishUnsupported.hashCode()
+        result = 31 * result + publishFailed.hashCode()
         return result
     }
 
@@ -65,8 +93,19 @@ public class StreamLabels(
         home: String = this.home,
         recent: String = this.recent,
         disconnected: String = this.disconnected,
+        microphone: String = this.microphone,
+        camera: String = this.camera,
+        stopMicrophone: String = this.stopMicrophone,
+        stopCamera: String = this.stopCamera,
+        publishStarting: String = this.publishStarting,
+        publishPermissionDenied: String = this.publishPermissionDenied,
+        publishNotAllowed: String = this.publishNotAllowed,
+        publishUnsupported: String = this.publishUnsupported,
+        publishFailed: String = this.publishFailed,
+
     ): StreamLabels = StreamLabels(
         connecting, reconnecting, reconnectingAttempt, unavailable, retry, back, home, recent, disconnected,
+        microphone, camera, stopMicrophone, stopCamera, publishStarting, publishPermissionDenied, publishNotAllowed, publishUnsupported, publishFailed,
     )
 }
 

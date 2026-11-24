@@ -134,3 +134,13 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 ## License
 
 [Apache-2.0](LICENSE).
+
+### Microphone and camera
+
+Supply per-device `StreamConfig(publishCapabilities = …)` from your backend to enable optional local
+microphone/camera injection. After host runtime permission and viewer connection,
+`session.startPublish(PublishOptions(audio = true, video = true))` returns when active;
+`session.stopPublish()` releases capture without stopping viewing. Observe `session.publishState`
+and publish errors through `session.errors` (`operation == "publish"`). Reconnect never resumes
+capture. The default Compose UI includes a hideable, labelled microphone/camera pill.
+See [Publishing](docs/publishing.md) for permissions, capabilities, errors and UI options.

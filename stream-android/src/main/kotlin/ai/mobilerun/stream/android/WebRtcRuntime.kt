@@ -4,6 +4,8 @@
 package ai.mobilerun.stream.android
 
 import android.content.Context
+import org.webrtc.DefaultVideoEncoderFactory
+import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.EglBase
 import org.webrtc.PeerConnectionFactory
@@ -26,6 +28,8 @@ internal object WebRtcRuntime {
 
     @Volatile private var factoryInstance: PeerConnectionFactory? = null
     private val lock = Any()
+    val captureErrors = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
+    val encoderFactory by lazy { DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true) }
 
     /** The EGL context decoders and renderers must share to exchange texture frames. */
     val eglBase: EglBase by lazy { EglBase.create() }
@@ -53,12 +57,25 @@ internal object WebRtcRuntime {
         disposer.schedule({ runCatching(release) }, DISPOSE_DELAY_MS, TimeUnit.MILLISECONDS)
     }
 
+    private fun captureFailed() { captureErrors.forEach { it() } }
+
     private fun create(appContext: Context): PeerConnectionFactory {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions(),
         )
-        return PeerConnectionFactory.builder()
+        val audioModule = JavaAudioDeviceModule.builder(appContext)
+            .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                override fun onWebRtcAudioRecordInitError(errorMessage: String) = captureFailed()
+                override fun onWebRtcAudioRecordStartError(
+                    errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode, errorMessage: String,
+                ) = captureFailed()
+                override fun onWebRtcAudioRecordError(errorMessage: String) = captureFailed()
+            }).createAudioDeviceModule()
+        return try { PeerConnectionFactory.builder()
+            .setAudioDeviceModule(audioModule)
+            .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
             .createPeerConnectionFactory()
+        } finally { audioModule.release() }
     }
 }

@@ -3,6 +3,10 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.DevicePublishCapabilities
+import ai.mobilerun.stream.core.PublishKind
+import ai.mobilerun.stream.core.PublishOptions
+import ai.mobilerun.stream.core.PublishState
 import ai.mobilerun.stream.core.PeerTransportFactory
 import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
@@ -105,7 +109,7 @@ public class DeviceStreamSession internal constructor(
     @Volatile private var activePeer: WebRtcPeerTransport? = null
     internal val media = StreamMedia(config.muted)
     private val nativePeers = WebRtcPeerTransportFactory(
-        { WebRtcRuntime.factory(appContext) }, media, config.videoCodec)
+        { WebRtcRuntime.factory(appContext) }, media, config.videoCodec, appContext, config.publishCapabilities)
     private val engine = StreamSessionEngine(
         scope = worker,
         credentials = credentials,
@@ -119,6 +123,7 @@ public class DeviceStreamSession internal constructor(
                 if (isClosed) activePeer = null
             }
         },
+        publishCapabilities = config.publishCapabilities,
         logger = logger,
         warn = { Log.w(LOG_TAG, it) },
     )
@@ -135,6 +140,21 @@ public class DeviceStreamSession internal constructor(
             activePeer = null
         }
     }
+
+    /** Device support snapshot; this never grants permission to publish. */
+    public val publishCapabilities: DevicePublishCapabilities? = config.publishCapabilities
+
+    /** Camera sender support verified in this connection's first offer. */
+    public val cameraPublishSupported: Boolean get() = activePeer?.publishKinds?.contains(PublishKind.Video) == true
+
+    /** Local media progress, independent of the viewer connection. */
+    public val publishState: StateFlow<PublishState> get() = engine.publishState
+
+    /** Host must obtain RECORD_AUDIO (and CAMERA for video) before calling. Never prompts itself. */
+    public suspend fun startPublish(options: PublishOptions): PublishState = engine.startPublish(options)
+
+    /** Idempotent local teardown; viewing and downstream mute remain unchanged. */
+    public suspend fun stopPublish(): Unit = engine.stopPublish()
 
     /** The connection status. */
     public val status: StateFlow<StreamStatus> get() = engine.status
