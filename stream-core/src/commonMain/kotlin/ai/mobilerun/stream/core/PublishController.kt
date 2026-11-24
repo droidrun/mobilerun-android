@@ -170,6 +170,10 @@ internal class PublishController(
         op.result.completeExceptionally(PublishException(failure(StreamErrorReason.PublishCancelled)))
     }
 
+    fun cancelStart(result: CompletableDeferred<PublishState>) {
+        if (operation?.result === result) stop()
+    }
+
     fun disconnected(binding: PublishBinding?) {
         val op = operation ?: return
         if (op.binding === binding) fail(op, failure(StreamErrorReason.Disconnected))

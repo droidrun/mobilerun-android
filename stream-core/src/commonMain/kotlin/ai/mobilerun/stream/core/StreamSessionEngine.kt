@@ -20,6 +20,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.async
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -139,8 +140,14 @@ public class StreamSessionEngine(
 
     /** Returns only once the server reports active and all requested inputs have attached. */
     public suspend fun startPublish(options: PublishOptions): PublishState {
-        val pending = withContext(serial) { publisher.start(options, connection?.publishBinding, closed) }
-        return pending.await()
+        var pending: CompletableDeferred<PublishState>? = null
+        try {
+            withContext(serial) { pending = publisher.start(options, connection?.publishBinding, closed) }
+            return checkNotNull(pending).await()
+        } catch (e: CancellationException) {
+            withContext(NonCancellable + serial) { pending?.let(publisher::cancelStart) }
+            throw e
+        }
     }
 
     /** Stops local capture without waiting for the server. */

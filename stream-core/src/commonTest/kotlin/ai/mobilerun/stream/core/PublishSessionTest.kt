@@ -78,4 +78,21 @@ class PublishSessionTest {
         val closed = assertFailsWith<PublishException> { h.engine.startPublish(PublishOptions(true)) }
         assertEquals("session_closed", closed.failure.detail)
     }
+    @Test fun cancellingStartCallerStopsCaptureAndIgnoresLateAcceptance() = runTest {
+        val h = Harness(this, publishCapabilities = DevicePublishCapabilities(true, false, "direct"))
+        h.connect()
+        val start = async { h.engine.startPublish(PublishOptions(true)) }
+        runCurrent()
+        val id = h.engine.publishState.value.mediaSessionId
+        assertEquals(1, h.peer.captureCount)
+        start.cancel()
+        runCurrent()
+        assertEquals(PublishPhase.Stopped, h.engine.publishState.value.phase)
+        assertTrue(h.peer.publishCapture.stops > 0)
+        h.socket.serverSends("""{"type":"publishState","mediaSessionId":"$id","state":"active"}""")
+        runCurrent()
+        assertTrue(h.peer.publishCapture.attached.isEmpty())
+        assertEquals("stopped_by_client", h.engine.publishState.value.reason)
+    }
+
 }

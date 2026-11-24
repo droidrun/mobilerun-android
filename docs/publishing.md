@@ -33,7 +33,8 @@ application context. This feature adds no background capture or foreground servi
 `Accepted`, `Active`, `Stopped`, and `Error`. Start returns only after server `active` and ordered
 microphone/camera attachment both succeed. Stop cancels a pending start with `PublishException`
 (`failure.reason == PublishCancelled`) and preserves a `Stopped/stopped_by_client` snapshot,
-without emitting an error. A second concurrent start fails without disturbing the current publish.
+without emitting an error. Cancelling the coroutine awaiting start also stops capture, following
+Kotlin cancellation semantics. A second concurrent start fails without disturbing the current publish.
 To change camera kinds, stop and start explicitly; every start gets a fresh media UUID.
 
 Other failures throw `PublishException` carrying `PublishFailure` and appear once on `session.errors`
