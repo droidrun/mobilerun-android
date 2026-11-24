@@ -25,8 +25,8 @@ callers and authorize device access in their own backend.
 The helper only answers loopback Host headers on its listening port and requests without Origin.
 
 - `GET /api/v1/devices/:deviceId` uses `sdk.devices.get(id)` and returns only `{id,state,streamUrl}`.
-- `POST /api/v1/devices/:deviceId/stream-key` uses `sdk.api.post('/identity/stream-keys',
-  {body:{deviceId,ttlSeconds:120},maxRetries:0})` and returns only `{key,keyId,expiresAt}` (201/no-store).
+- `POST /api/v1/devices/:deviceId/stream-key` uses
+  `sdk.streamTokens.create({deviceId,ttlSeconds:120},{maxRetries:0})` and returns only `{key,keyId,expiresAt}` (201/no-store).
   The upstream wire endpoint is `POST /v1/identity/stream-keys`.
 
 Create a credential-free launch JSON file outside the checkout:
