@@ -3,6 +3,8 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.DevicePublishCapabilities
+
 /** Which video codecs the receiver asks the server to use. */
 public enum class VideoCodecPreference {
     /**
@@ -29,4 +31,6 @@ public enum class VideoCodecPreference {
 public class StreamConfig(
     public val muted: Boolean = true,
     public val videoCodec: VideoCodecPreference = VideoCodecPreference.Auto,
+    /** Per-device capability snapshot from the integrator's backend; fixed for this connection. */
+    public val publishCapabilities: DevicePublishCapabilities? = null,
 )

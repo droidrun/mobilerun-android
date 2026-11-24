@@ -3,6 +3,12 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.DevicePublishCapabilities
+import ai.mobilerun.stream.core.PublishKind
+import ai.mobilerun.stream.core.PublishOptions
+import ai.mobilerun.stream.core.PublishCapture
+import ai.mobilerun.stream.core.PublishPeerTransport
+import android.content.Context
 import ai.mobilerun.stream.core.StreamStats
 import ai.mobilerun.stream.core.PeerConfiguration
 import ai.mobilerun.stream.core.PeerConnectionState
@@ -35,23 +41,27 @@ internal class WebRtcPeerTransportFactory(
     private val factory: () -> PeerConnectionFactory,
     private val media: StreamMedia,
     private val codec: VideoCodecPreference,
+    private val context: Context,
+    private val publishCapabilities: DevicePublishCapabilities?,
 ) : PeerTransportFactory {
     override fun create(
         configuration: PeerConfiguration,
         channels: List<DataChannelSpec>,
         listener: PeerListener,
-    ): WebRtcPeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec)
+    ): WebRtcPeerTransport = WebRtcPeerTransport(factory(), configuration, channels, listener, media, codec, context, publishCapabilities)
 }
 
 /** One libwebrtc peer connection: recvonly audio and video, the negotiated data channels. */
 internal class WebRtcPeerTransport(
-    factory: PeerConnectionFactory,
+    private val factory: PeerConnectionFactory,
     configuration: PeerConfiguration,
     channelSpecs: List<DataChannelSpec>,
     private val listener: PeerListener,
     private val media: StreamMedia,
     codec: VideoCodecPreference,
-) : PeerTransport, PeerConnection.Observer {
+    private val context: Context,
+    publishCapabilities: DevicePublishCapabilities?,
+) : PublishPeerTransport, PeerTransport, PeerConnection.Observer {
     private val rtcConfiguration = PeerConnection.RTCConfiguration(toIceServers(configuration.iceServers)).apply {
         sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         if (configuration.iceTransportPolicy == "relay") iceTransportsType = PeerConnection.IceTransportsType.RELAY
@@ -60,6 +70,12 @@ internal class WebRtcPeerTransport(
         factory.createPeerConnection(rtcConfiguration, this)
             ?: throw IllegalStateException("createPeerConnection returned null")
     private val channels = HashMap<Int, DataChannel>()
+    private val upstream = linkedMapOf<PublishKind, RtpTransceiver>()
+    private var offeredKinds: Set<PublishKind> = emptySet()
+    override val publishKinds: Set<PublishKind> get() = offeredKinds
+
+    override suspend fun capture(options: PublishOptions, onEnded: () -> Unit): PublishCapture =
+        AndroidPublishCapture.create(context, factory, upstream, options, onEnded)
 
     @Volatile private var closed = false
     @Volatile private var videoTrack: VideoTrack? = null
@@ -95,6 +111,26 @@ internal class WebRtcPeerTransport(
             )
             val capabilities = factory.getRtpReceiverCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
             CodecOrder.order(capabilities, { it.mimeType }, codec)?.let { video.setCodecPreferences(it) }
+            if (publishCapabilities?.supportsMicrophone == true) {
+                val videoCodecs = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
+                    .filter { it.mimeType.equals("video/H264", true) && it.parameters["packetization-mode"] == "1" &&
+                        supportsPublishH264(it.parameters["profile-level-id"]) }
+                    .sortedBy { if (it.parameters["profile-level-id"]?.startsWith("42") == true) 0 else 1 }
+                if (publishCapabilities.cameraInjection && videoCodecs.isNotEmpty()) {
+                    upstream[PublishKind.Video] = peerConnection.addTransceiver(
+                        MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                        RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY),
+                    ).also { it.setCodecPreferences(videoCodecs) }
+                }
+                upstream[PublishKind.Audio] = peerConnection.addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY),
+                ).also { transceiver ->
+                    val opus = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO).codecs
+                        .filter { it.mimeType.equals("audio/opus", true) && it.clockRate == 48000 && it.numChannels == 2 }
+                    if (opus.isNotEmpty()) transceiver.setCodecPreferences(opus)
+                }
+            }
             for (spec in channelSpecs) createChannel(spec)
         } catch (e: Exception) {
             close()
@@ -135,7 +171,11 @@ internal class WebRtcPeerTransport(
                 override fun onCreateSuccess(description: SessionDescription) {
                     peerConnection.setLocalDescription(
                         object : SdpCallback(continuation::resumeWithException) {
-                            override fun onSetSuccess() = continuation.resume(description.description)
+                            override fun onSetSuccess() {
+                                if (!iceRestart) offeredKinds = validPublishReservations(description.description,
+                                    upstream.mapValues { it.value.mid })
+                                continuation.resume(description.description)
+                            }
                         },
                         description,
                     )

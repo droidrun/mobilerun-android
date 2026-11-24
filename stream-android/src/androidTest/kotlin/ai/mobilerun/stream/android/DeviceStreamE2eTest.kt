@@ -110,7 +110,7 @@ class DeviceStreamE2eTest {
             signalling = tap,
             peers = ai.mobilerun.stream.core.PeerTransportFactory { configuration, channels, listener ->
                 WebRtcPeerTransportFactory({ WebRtcRuntime.factory(context) }, session.media,
-                    codec).create(configuration, channels, listener).also { peer = it }
+                    codec, context, null).create(configuration, channels, listener).also { peer = it }
             },
         )
     }

@@ -18,7 +18,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.async
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -94,6 +96,7 @@ public class StreamSessionEngine(
     private val newSessionId: () -> String = ::randomSessionId,
     private val logger: StreamLogger? = null,
     private val warn: (String) -> Unit = {},
+    publishCapabilities: DevicePublishCapabilities? = null,
 ) {
     private val engineJob = SupervisorJob(scope.coroutineContext[Job])
     private val serial: CoroutineDispatcher = serialDispatcher(scope)
@@ -127,6 +130,34 @@ public class StreamSessionEngine(
         random = random,
     )
 
+    private val publisher = PublishController(engineScope, publishCapabilities, { failure, id ->
+        mutableErrors.tryEmit(StreamError(failure.reason, failure.message, controller.snapshot.attempt,
+            true, "publish", id, failure.detail, failure.serverReason))
+    })
+
+    /** Local media progress, independent of viewer status. */
+    public val publishState: StateFlow<PublishState> get() = publisher.state
+
+    /** Returns only once the server reports active and all requested inputs have attached. */
+    public suspend fun startPublish(options: PublishOptions, beforeCapture: suspend () -> Unit = {}): PublishState {
+        var pending: CompletableDeferred<PublishState>? = null
+        try {
+            withContext(serial) { pending = publisher.start(options, connection?.publishBinding, closed, beforeCapture) }
+            return checkNotNull(pending).await()
+        } catch (e: CancellationException) {
+            withContext(NonCancellable + serial) { pending?.let(publisher::cancelStart) }
+            throw e
+        }
+    }
+
+    /** Ends publication when its viewer is removed or replaced, without fabricating a local stop. */
+    public suspend fun disconnectPublish(): Unit = withContext(serial) {
+        publisher.disconnected(connection?.publishBinding)
+    }
+
+    /** Stops local capture without waiting for the server. */
+    public suspend fun stopPublish(): Unit = withContext(serial) { publisher.stop() }
+
     private val closed: Boolean get() = !engineJob.isActive
     private var started = false
     private var hostVisible = true
@@ -147,8 +178,14 @@ public class StreamSessionEngine(
     init {
         // One release path for close() and for the cancellation of the host scope: it runs on the
         // serial context once every engine coroutine has ended.
+        engineScope.launch {
+            try { awaitCancellation() } finally {
+                publisher.stop()
+            }
+        }
         engineJob.invokeOnCompletion {
             CoroutineScope(serial).launch {
+                publisher.stop()
                 controller.dispose()
                 releaseConnection()
             }
@@ -180,7 +217,10 @@ public class StreamSessionEngine(
 
     /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
     public fun setVisible(visible: Boolean) {
-        engineScope.launchGuarded { hostVisible = visible }
+        engineScope.launchGuarded {
+            hostVisible = visible
+            if (!visible) publisher.stop()
+        }
     }
 
     /** Foreground/network recovery. A closed or not-yet-started session is never started by wake. */
@@ -363,6 +403,8 @@ public class StreamSessionEngine(
 
         @Volatile var wsOpen = false
             private set
+        var publishBinding: PublishBinding? = null
+            private set
         var controlOpen = false
             private set
 
@@ -455,6 +497,7 @@ public class StreamSessionEngine(
 
         fun release() {
             if (released) return
+            publisher.disconnected(publishBinding)
             released = true
             wsOpen = false
             controlOpen = false
@@ -486,6 +529,7 @@ public class StreamSessionEngine(
         private fun fail(reason: StreamErrorReason, releaseImmediately: Boolean = false) {
             if (!isCurrent || failed) return
             failed = true
+            publisher.disconnected(publishBinding)
             handshakeTimer?.cancel()
             if (releaseImmediately) releaseConnection()
             withFailureReason(reason) { controller.handleFailure() }
@@ -553,6 +597,7 @@ public class StreamSessionEngine(
             when (message) {
                 is ServerMessage.RtcConfiguration ->
                     if (phase == SignallingPhase.AwaitingRtcConfiguration) startPeer(message) else refresh(message)
+                is ServerMessage.PublishState -> publisher.receive(publishBinding, message)
                 is ServerMessage.Answer -> applyAnswer(message)
                 is ServerMessage.Candidate -> applyCandidate(message)
                 is ServerMessage.Screenshot -> screenshots.remove(message.id)?.let { reply ->
@@ -592,6 +637,9 @@ public class StreamSessionEngine(
                     return
                 }
                 peer = created
+                publishBinding = PublishBinding(created as? PublishPeerTransport,
+                    { isCurrent && !failed && wsOpen && created.connectionState == PeerConnectionState.Connected },
+                    { if (isCurrent && wsOpen) send(it) else false })
                 val sdp = created.createOffer(iceRestart = false)
                 if (!isCurrent || peer !== created) return
                 send(ClientMessage.Offer(sdp, sessionId))
@@ -719,6 +767,7 @@ public class StreamSessionEngine(
                 // Media still flows on the old pair during an ICE restart; recheck when the window ends.
                 nowMs() < iceRestartGraceUntil -> scheduleRestartRecheck()
                 else -> {
+                    publisher.disconnected(publishBinding)
                     restartRecheck?.cancel()
                     restartRecheck = null
                     withFailureReason(StreamErrorReason.Disconnected) { controller.handleDisconnected() }
@@ -738,6 +787,7 @@ public class StreamSessionEngine(
                     return@launchGuarded
                 }
                 if (watched.connectionState == PeerConnectionState.Connected) return@launchGuarded
+                publisher.disconnected(publishBinding)
                 log("ICE-restart grace expired")
                 withFailureReason(StreamErrorReason.Disconnected) { controller.handleDisconnected() }
             }

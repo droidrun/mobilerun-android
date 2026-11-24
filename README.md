@@ -21,7 +21,7 @@
 ·
 <a href="https://cloud.mobilerun.ai">☁️ Mobilerun Cloud</a>
 
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](#install)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84.svg)](#install)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/discord/1360219330318696488?color=white&label=Discord&logo=discord&logoColor=white)](https://discord.gg/ZZbKEZZkwK)
@@ -60,54 +60,57 @@
 
 ## Install
 
-Version `v0.1.0` is distributed from the git tag through [JitPack](https://jitpack.io).
-The repository must be public and the tag's JitPack build must succeed before these coordinates resolve.
-Add the repository in `settings.gradle.kts`:
+Configure Maven Central in `settings.gradle.kts`:
 
 ```kotlin
 dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://jitpack.io")
-            content { includeGroup("com.github.droidrun.mobilerun-android") }
-        }
     }
 }
 ```
 
-Then add to your app module:
+Add the Compose SDK to your app module with group `ai.mobilerun` and version `0.1.0`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.droidrun.mobilerun-android:mobilerun-stream-compose:v0.1.0")
+    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
 }
 ```
 
-For a View-only host, use
-`com.github.droidrun.mobilerun-android:mobilerun-stream-android:v0.1.0` instead.
+For a View host, use `ai.mobilerun:mobilerun-stream-android:0.1.0` instead.
 See [package and artifacts](docs/package.md) for module details and headless JVM use.
 
 ## Quick start
 
 1. Your server mints a short-lived stream key for one device with your API key
-   (`POST /v1/identity/stream-keys`). Follow the [Partner guide](https://docs.mobilerun.ai/partners).
+   using `client.streamTokens.create`. Follow the [Partner guide](https://docs.mobilerun.ai/partners).
 2. Your app's `tokenProvider` asks your server for a key before each connection.
 3. The SDK opens the stream with that key, one key per connection, and reconnects with a fresh one.
 
-On your server, use `@mobilerun/sdk@6.2.1` with a base URL ending in `/v1`.
-Adapt the [local example helper](sample/backend/server.mjs) to your authenticated backend:
+On your Node server, install `@mobilerun/sdk@6.3.0` and keep `MOBILERUN_API_KEY` in the server environment.
+Return a fresh key to the authorized app for every connection:
 
 ```js
-// Authenticate your user and check they own the device before minting.
-const result = await sdk.api.post('/identity/stream-keys', {
-  body: { deviceId, ttlSeconds: 120 },
+import { MobilerunSDK } from '@mobilerun/sdk';
+
+// Node server only. Authenticate the user and authorize this device before minting.
+const client = new MobilerunSDK({
+  apiKey: process.env.MOBILERUN_API_KEY,
   maxRetries: 0,
 });
+const allowedOrigins = ['https://app.example.com']; // optional browser origin policy
+const { key, keyId, expiresAt } = await client.streamTokens.create({
+  deviceId,
+  ttlSeconds: 120,
+  allowedOrigins,
+});
 res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-res.end(JSON.stringify({ key: result.key, keyId: result.keyId, expiresAt: result.expiresAt }));
+res.end(JSON.stringify({ key, keyId, expiresAt }));
 ```
+
+REST fallback: `POST /v1/identity/stream-keys` with bearer API-key authentication on the server.
 
 In your app, `backend` below is your own client for that server:
 
@@ -133,10 +136,12 @@ For the runnable sample, see [TESTING.md](TESTING.md).
 
 ## Guides
 
+Coding agents: use the [Mobilerun device stream skill](skills/mobilerun-device-stream/SKILL.md) for Kotlin integration.
+
 | Guide | Covers |
 |---|---|
 | [Stream keys](docs/stream-keys.md) | Token provider, deadlines, secure URLs and legacy credentials |
-| [Package](docs/package.md) | Modules, supported API, configuration and JitPack artifacts |
+| [Package](docs/package.md) | Modules, supported API, configuration and Maven Central artifacts |
 | [Video and input](docs/video-and-input.md) | View and Compose hosts, touch, keyboard, IME and navigation |
 | [Default UI](docs/default-ui.md) | Chrome, labels, themes and white-label slots |
 | [Task approvals](docs/task-approvals.md) | Backend callbacks, polling, decisions and approval cards |
@@ -152,3 +157,13 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 [Apache-2.0](LICENSE). App distributors must also retain applicable dependency licenses and notices;
 see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+### Microphone and camera
+
+Supply per-device `StreamConfig(publishCapabilities = …)` from your backend to enable optional local
+microphone/camera injection. After host runtime permission and viewer connection,
+`session.startPublish(PublishOptions(audio = true, video = true))` returns when active;
+`session.stopPublish()` releases capture without stopping viewing. Observe `session.publishState`
+and publish errors through `session.errors` (`operation == "publish"`). Reconnect never resumes
+capture. The default Compose UI includes a hideable, labelled microphone/camera pill.
+See [Publishing](docs/publishing.md) for permissions, capabilities, errors and UI options.

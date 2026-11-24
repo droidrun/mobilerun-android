@@ -76,7 +76,14 @@ internal class FakePeer(
     val configuration: PeerConfiguration,
     val channels: List<DataChannelSpec>,
     private val listener: PeerListener,
-) : PeerTransport {
+) : PeerTransport, PublishPeerTransport {
+    override val publishKinds = setOf(PublishKind.Audio, PublishKind.Video)
+    val publishCapture = FakePublishCapture()
+    var captureCount = 0
+    override suspend fun capture(options: PublishOptions, onEnded: () -> Unit): PublishCapture {
+        captureCount++
+        return publishCapture
+    }
     override var connectionState: PeerConnectionState = PeerConnectionState.New
         private set
     var isClosed = false

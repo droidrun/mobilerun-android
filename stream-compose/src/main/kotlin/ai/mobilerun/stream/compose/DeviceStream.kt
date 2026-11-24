@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 
 /** The navigation slot's immutable state and guarded action callback. */
 @Immutable
@@ -53,6 +56,8 @@ public fun DeviceStream(
     hasControl: Boolean = true,
     labels: StreamLabels = StreamLabels(),
     observeLifecycle: Boolean = true,
+    showPublishControls: Boolean = true,
+    requestPublishPermissions: (suspend (ai.mobilerun.stream.core.PublishOptions) -> Unit)? = null,
     placeholder: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultPlaceholder,
     unavailable: @Composable BoxScope.(StreamOverlayState) -> Unit = defaultUnavailable,
     navigationBar: @Composable (StreamNavigationState) -> Unit = {
@@ -67,12 +72,18 @@ public fun DeviceStream(
     val navigation = remember(canControl, labels, view) {
         StreamNavigationState(canControl, labels) { if (canControl) view?.sendSystemKey(it) }
     }
+    LaunchedEffect(session) {
+        try { awaitCancellation() } finally {
+            withContext(NonCancellable) { session.disconnectPublish() }
+        }
+    }
     DisposableEffect(session, context, observeLifecycle) {
         val lifecycle = if (observeLifecycle) StreamLifecycle(context, session) else null
         onDispose { lifecycle?.close() }
     }
     Column(modifier.background(StreamTheme.tokens.background)) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        val publishActivity = remember { mutableLongStateOf(0L) }
+        Box(Modifier.weight(1f).fillMaxWidth().observePublishProximity { publishActivity.longValue++ }) {
             AndroidView(
                 factory = { DeviceStreamView(it).also { created -> view = created } },
                 modifier = Modifier.fillMaxSize(),
@@ -86,6 +97,8 @@ public fun DeviceStream(
                 },
             )
             StreamOverlay(status, labels, session::retry, placeholder, unavailable)
+            SessionPublishControls(session, status, closed, showPublishControls, labels,
+                Modifier.align(Alignment.BottomCenter).padding(16.dp), requestPublishPermissions, publishActivity.longValue)
         }
         navigationBar(navigation)
     }
