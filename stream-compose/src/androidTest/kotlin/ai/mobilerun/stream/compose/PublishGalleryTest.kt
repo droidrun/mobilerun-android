@@ -53,6 +53,7 @@ class PublishGalleryTest {
         }
         compose.onNodeWithContentDescription("Stop microphone").assertIsEnabled()
         compose.onNodeWithContentDescription("Stop camera").assertIsEnabled()
+        val microphoneBounds = compose.onNodeWithContentDescription("Stop microphone").getUnclippedBoundsInRoot()
         shot("publish-after")
         compose.runOnIdle { state = PublishState(PublishPhase.Starting) }
         compose.onNodeWithContentDescription("Microphone").assertIsNotEnabled()
@@ -60,6 +61,7 @@ class PublishGalleryTest {
         shot("publish-starting")
         compose.runOnIdle { state = PublishState(PublishPhase.Error, reason = "permission_denied") }
         compose.onNodeWithText("Microphone or camera permission denied").assertIsDisplayed()
+        assertEquals(microphoneBounds, compose.onNodeWithContentDescription("Microphone").getUnclippedBoundsInRoot())
         shot("publish-permission")
     }
 

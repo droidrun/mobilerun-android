@@ -94,7 +94,7 @@ internal fun PublishPill(state: PublishState, connected: Boolean, cameraSupporte
         else -> labels.publishFailed
     }
     // The label is an overlay anchored above the fixed-height pill, never a layout sibling.
-    Box(modifier.height(48.dp).alpha(if (faded) .5f else 1f)) {
+    Box(modifier.width(if (cameraSupported) 108.dp else 60.dp).height(48.dp).alpha(if (faded) .5f else 1f)) {
         if (label.isNotEmpty()) BasicText(label, Modifier.align(Alignment.BottomCenter)
             .wrapContentWidth(unbounded = true).offset(y = (-54).dp),
             style = t.typography.caption.copy(color = t.destructive))
