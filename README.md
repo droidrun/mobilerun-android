@@ -21,7 +21,7 @@
 ·
 <a href="https://cloud.mobilerun.ai">☁️ Mobilerun Cloud</a>
 
-[![Status](https://img.shields.io/badge/status-pre--release-grey.svg)](#install)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](#install)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84.svg)](#install)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/discord/1360219330318696488?color=white&label=Discord&logo=discord&logoColor=white)](https://discord.gg/ZZbKEZZkwK)
@@ -60,17 +60,27 @@
 
 ## Install
 
-The SDK is not published yet; use the source checkout today.
-Clone this repository and open it in Android Studio, then add to an app module inside this checkout:
+Configure Maven Central in `settings.gradle.kts`:
 
 ```kotlin
-dependencies {
-    implementation(project(":stream-compose"))
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 ```
 
-For a View host, use `project(":stream-android")` instead.
-See [package and planned artifacts](docs/package.md) for module details and future Maven coordinates.
+Add the Compose SDK to your app module with group `ai.mobilerun` and version `0.1.0`:
+
+```kotlin
+dependencies {
+    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+}
+```
+
+For a View host, use `ai.mobilerun:mobilerun-stream-android:0.1.0` instead.
+See [package and artifacts](docs/package.md) for module details and headless JVM use.
 
 ## Quick start
 
@@ -131,7 +141,7 @@ Coding agents: use the [Mobilerun device stream skill](skills/mobilerun-device-s
 | Guide | Covers |
 |---|---|
 | [Stream keys](docs/stream-keys.md) | Token provider, deadlines, secure URLs and legacy credentials |
-| [Package](docs/package.md) | Modules, supported API, configuration and planned Maven artifacts |
+| [Package](docs/package.md) | Modules, supported API, configuration and Maven Central artifacts |
 | [Video and input](docs/video-and-input.md) | View and Compose hosts, touch, keyboard, IME and navigation |
 | [Default UI](docs/default-ui.md) | Chrome, labels, themes and white-label slots |
 | [Task approvals](docs/task-approvals.md) | Backend callbacks, polling, decisions and approval cards |
@@ -145,7 +155,8 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache-2.0](LICENSE).
+[Apache-2.0](LICENSE). App distributors must also retain applicable dependency licenses and notices;
+see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ### Microphone and camera
 

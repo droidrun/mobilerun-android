@@ -1,8 +1,9 @@
 ← [README](../README.md) · [Partner guide](https://docs.mobilerun.ai/partners)
 
-## Status: pre-release
+## Package
 
-The headless core, Android connection layer and interactive video view exist. The optional default UI, approval controller and white-label theme exist; nothing is published.
+The SDK includes a headless core, Android connection layer, interactive video view, optional default UI,
+approval controller and white-label theme. Release `0.1.0` uses Maven Central coordinates under group `ai.mobilerun`.
 
 | Module | Package | Contents |
 |---|---|---|
@@ -23,16 +24,15 @@ in `commonMain`, with JVM URL validation in `jvmMain`. `:stream-android` is an A
 (minSdk 24, compileSdk 36, JVM 17).
 
 
-## Installation (after first release)
+## Installation
 
-These coordinates are reserved for the first Maven Central release; they are not available yet.
-With `mavenCentral()` configured, use:
+Configure `google()` and `mavenCentral()` as shown in the [README](../README.md#install), then use:
 
 ```kotlin
 dependencies {
     implementation("ai.mobilerun:mobilerun-stream-android:0.1.0")
     // Optional Compose UI; includes the Android streaming module transitively.
-    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+    // implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
 }
 ```
 
