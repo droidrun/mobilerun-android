@@ -30,6 +30,30 @@
 
 </div>
 
+## Install
+
+Configure Maven Central in `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+```
+
+Add the Compose SDK to your app module with group `ai.mobilerun` and version `0.1.0`:
+
+```kotlin
+dependencies {
+    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
+}
+```
+
+For a View host, use `ai.mobilerun:mobilerun-stream-android:0.1.0` instead.
+See [package and artifacts](docs/package.md) for module details and headless JVM use.
+
 > **Building Mobilerun phones into your platform?** Start with the [Partner guide](https://docs.mobilerun.ai/partners). It walks through the API key, one phone per user, stream keys and live viewing step by step.
 
 <table>
@@ -57,30 +81,6 @@
 </td>
 </tr>
 </table>
-
-## Install
-
-Configure Maven Central in `settings.gradle.kts`:
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-```
-
-Add the Compose SDK to your app module with group `ai.mobilerun` and version `0.1.0`:
-
-```kotlin
-dependencies {
-    implementation("ai.mobilerun:mobilerun-stream-compose:0.1.0")
-}
-```
-
-For a View host, use `ai.mobilerun:mobilerun-stream-android:0.1.0` instead.
-See [package and artifacts](docs/package.md) for module details and headless JVM use.
 
 ## Quick start
 
