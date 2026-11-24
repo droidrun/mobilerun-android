@@ -75,22 +75,32 @@ See [package and planned artifacts](docs/package.md) for module details and futu
 ## Quick start
 
 1. Your server mints a short-lived stream key for one device with your API key
-   (`POST /v1/identity/stream-keys`). Follow the [Partner guide](https://docs.mobilerun.ai/partners).
+   using `client.streamTokens.create`. Follow the [Partner guide](https://docs.mobilerun.ai/partners).
 2. Your app's `tokenProvider` asks your server for a key before each connection.
 3. The SDK opens the stream with that key, one key per connection, and reconnects with a fresh one.
 
-On your server, use `@mobilerun/sdk@6.2.1` with a base URL ending in `/v1`.
-Adapt the [local example helper](sample/backend/server.mjs) to your authenticated backend:
+On your Node server, install `@mobilerun/sdk@6.3.0` and keep `MOBILERUN_API_KEY` in the server environment.
+Return a fresh key to the authorized app for every connection:
 
 ```js
-// Authenticate your user and check they own the device before minting.
-const result = await sdk.api.post('/identity/stream-keys', {
-  body: { deviceId, ttlSeconds: 120 },
+import { MobilerunSDK } from '@mobilerun/sdk';
+
+// Node server only. Authenticate the user and authorize this device before minting.
+const client = new MobilerunSDK({
+  apiKey: process.env.MOBILERUN_API_KEY,
   maxRetries: 0,
 });
+const allowedOrigins = ['https://app.example.com']; // optional browser origin policy
+const { key, keyId, expiresAt } = await client.streamTokens.create({
+  deviceId,
+  ttlSeconds: 120,
+  allowedOrigins,
+});
 res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-res.end(JSON.stringify({ key: result.key, keyId: result.keyId, expiresAt: result.expiresAt }));
+res.end(JSON.stringify({ key, keyId, expiresAt }));
 ```
+
+REST fallback: `POST /v1/identity/stream-keys` with bearer API-key authentication on the server.
 
 In your app, `backend` below is your own client for that server:
 
@@ -115,6 +125,8 @@ Never ship an API key in the app. Never cache keys or automatically retry mint r
 For the runnable sample, see [TESTING.md](TESTING.md).
 
 ## Guides
+
+Coding agents: use the [Mobilerun device stream skill](skills/mobilerun-device-stream/SKILL.md) for Kotlin integration.
 
 | Guide | Covers |
 |---|---|

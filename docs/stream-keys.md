@@ -40,11 +40,39 @@ exact bytes. Provider mode requires `wss` and a parsed host, except `ws` to exac
 **15 s** RTC-configuration budgets start at socket allocation, after key acquisition. ICE-server
 refresh on an existing socket never calls the provider.
 
-Your backend calls `sdk.api.post('/identity/stream-keys', {body: {deviceId, ttlSeconds: 120},
-maxRetries: 0})` with `@mobilerun/sdk@6.2.1` and a base URL ending in `/v1`: the wire endpoint is
-`POST /v1/identity/stream-keys`. Return only `{key,keyId,expiresAt}` with 201 and `Cache-Control: no-store`.
+Use `@mobilerun/sdk@6.3.0` on your Node backend with `MOBILERUN_API_KEY` in its server environment.
+After authenticating the app user and authorizing the requested device:
+
+```js
+import { MobilerunSDK } from '@mobilerun/sdk';
+
+// Node server only. Authenticate the user and authorize this device before minting.
+const client = new MobilerunSDK({
+  apiKey: process.env.MOBILERUN_API_KEY,
+  maxRetries: 0,
+});
+const allowedOrigins = ['https://app.example.com']; // optional browser origin policy
+const { key, keyId, expiresAt } = await client.streamTokens.create({
+  deviceId,
+  ttlSeconds: 120,
+  allowedOrigins,
+});
+res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+res.end(JSON.stringify({ key, keyId, expiresAt }));
+```
+
+`allowedOrigins` is optional and binds browser connections to exact origins; it does not replace
+device authorization. Return only `{key, keyId, expiresAt}` with 201 and `Cache-Control: no-store`.
 Keys are consumed at admission, even if the downstream upgrade fails; never cache or retry a mint
-request automatically. API keys stay on your authenticated, device-authorizing backend.
+request automatically. Keep the API key out of the Android app.
+
+To revoke an unused key on the server, use its returned `keyId`:
+
+```js
+await client.streamTokens.delete(keyId);
+```
+
+REST fallback: `POST /v1/identity/stream-keys` with bearer API-key authentication on the server.
 
 ## Errors
 
@@ -74,7 +102,7 @@ removed at the legacy token hard cut; the session logs one `MobilerunStream` war
 
 **Explicit exception:** with a static token the SDK reuses the same token for every reconnect, which is the
 one place a token is used for more than one socket. That only works for tokens that are not single-use. A
-single-use stream key (`POST /v1/identity/stream-keys`) is consumed at admission, so a reconnect with it is
+single-use stream key (from `client.streamTokens.create`) is consumed at admission, so a reconnect with it is
 rejected: use `tokenProvider` for single-use keys. Credentials discovery itself is not deprecated.
 For a runnable app, one-command emulator launcher, and feature checklist, see [TESTING.md](../TESTING.md).
 The sample helper only answers loopback Host headers on its listening port and requests without Origin.
