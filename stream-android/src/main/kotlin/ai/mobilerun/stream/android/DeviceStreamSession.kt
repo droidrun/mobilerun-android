@@ -3,6 +3,10 @@
 
 package ai.mobilerun.stream.android
 
+import ai.mobilerun.stream.core.DevicePublishCapabilities
+import ai.mobilerun.stream.core.PublishKind
+import ai.mobilerun.stream.core.PublishOptions
+import ai.mobilerun.stream.core.PublishState
 import ai.mobilerun.stream.core.PeerTransportFactory
 import ai.mobilerun.stream.core.ReconnectPolicy
 import ai.mobilerun.stream.core.SignallingTransportFactory
@@ -17,6 +21,14 @@ import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -105,7 +117,7 @@ public class DeviceStreamSession internal constructor(
     @Volatile private var activePeer: WebRtcPeerTransport? = null
     internal val media = StreamMedia(config.muted)
     private val nativePeers = WebRtcPeerTransportFactory(
-        { WebRtcRuntime.factory(appContext) }, media, config.videoCodec)
+        { WebRtcRuntime.factory(appContext) }, media, config.videoCodec, appContext, config.publishCapabilities)
     private val engine = StreamSessionEngine(
         scope = worker,
         credentials = credentials,
@@ -119,6 +131,7 @@ public class DeviceStreamSession internal constructor(
                 if (isClosed) activePeer = null
             }
         },
+        publishCapabilities = config.publishCapabilities,
         logger = logger,
         warn = { Log.w(LOG_TAG, it) },
     )
@@ -130,11 +143,46 @@ public class DeviceStreamSession internal constructor(
     internal val isClosed: Boolean get() = closed.value || !sessionJob.isActive
 
     init {
+        worker.launch(Dispatchers.Main.immediate) {
+            val lifecycle = ProcessLifecycleOwner.get().lifecycle
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) engine.setVisible(false)
+                if (event == Lifecycle.Event.ON_START) engine.setVisible(true)
+            }
+            lifecycle.addObserver(observer)
+            try { awaitCancellation() } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) { lifecycle.removeObserver(observer) }
+            }
+        }
         sessionJob.invokeOnCompletion {
             mutableClosed.value = true
             activePeer = null
         }
     }
+
+    /** Device support snapshot; this never grants permission to publish. */
+    public val publishCapabilities: DevicePublishCapabilities? = config.publishCapabilities
+
+    /** Camera sender support verified in this connection's first offer. */
+    public val cameraPublishSupported: Boolean get() = activePeer?.publishKinds?.contains(PublishKind.Video) == true
+
+    /** Local media progress, independent of the viewer connection. */
+    public val publishState: StateFlow<PublishState> get() = engine.publishState
+
+    /** Host must obtain RECORD_AUDIO (and CAMERA for video) before calling. Never prompts itself. */
+    public suspend fun startPublish(options: PublishOptions): PublishState = engine.startPublish(options)
+
+    /** Runs the host permission flow only after server acceptance, before checking grants/capture. */
+    @InternalStreamApi
+    public suspend fun startPublishWithPermissions(options: PublishOptions, requestPermissions: suspend () -> Unit): PublishState =
+        engine.startPublish(options) { withContext(Dispatchers.Main.immediate) { requestPermissions() } }
+
+    /** Viewer removal/replacement ends publication with a disconnected state and error. */
+    @InternalStreamApi
+    public suspend fun disconnectPublish(): Unit = engine.disconnectPublish()
+
+    /** Idempotent local teardown; viewing and downstream mute remain unchanged. */
+    public suspend fun stopPublish(): Unit = engine.stopPublish()
 
     /** The connection status. */
     public val status: StateFlow<StreamStatus> get() = engine.status

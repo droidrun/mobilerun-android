@@ -14,6 +14,21 @@ public final class ai/mobilerun/stream/protocol/ClientMessage$Offer$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
+public final synthetic class ai/mobilerun/stream/protocol/ClientMessage$PublishStart$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lai/mobilerun/stream/protocol/ClientMessage$PublishStart$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lai/mobilerun/stream/protocol/ClientMessage$PublishStart;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lai/mobilerun/stream/protocol/ClientMessage$PublishStart;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$PublishStart$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
 public final class ai/mobilerun/stream/protocol/ClientMessage$RequestFrame$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
@@ -23,6 +38,21 @@ public final class ai/mobilerun/stream/protocol/ClientMessage$RequestRtcConfigur
 }
 
 public final class ai/mobilerun/stream/protocol/ClientMessage$ScreenshotRequest$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final synthetic class ai/mobilerun/stream/protocol/ClientMessage$StopPublish$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lai/mobilerun/stream/protocol/ClientMessage$StopPublish$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lai/mobilerun/stream/protocol/ClientMessage$StopPublish;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lai/mobilerun/stream/protocol/ClientMessage$StopPublish;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ClientMessage$StopPublish$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 
@@ -38,6 +68,21 @@ public final class ai/mobilerun/stream/protocol/ServerMessage$Answer$Companion {
 }
 
 public final class ai/mobilerun/stream/protocol/ServerMessage$Candidate$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final synthetic class ai/mobilerun/stream/protocol/ServerMessage$PublishState$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lai/mobilerun/stream/protocol/ServerMessage$PublishState$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lai/mobilerun/stream/protocol/ServerMessage$PublishState;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lai/mobilerun/stream/protocol/ServerMessage$PublishState;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class ai/mobilerun/stream/protocol/ServerMessage$PublishState$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
 }
 

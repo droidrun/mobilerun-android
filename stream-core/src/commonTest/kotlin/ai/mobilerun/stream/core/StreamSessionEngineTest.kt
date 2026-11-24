@@ -51,6 +51,7 @@ internal class Harness(
     val scope: TestScope,
     first: StreamCredentials? = StreamCredentials("wss://stream.test/a", "token-a"),
     hostContext: CoroutineContext = scope.backgroundScope.coroutineContext,
+    publishCapabilities: DevicePublishCapabilities? = null,
 ) {
     val signalling = FakeSignalling { scope.currentTime }
     val peers = FakePeers()
@@ -70,6 +71,7 @@ internal class Harness(
 
     val engine = StreamSessionEngine(
         scope = host,
+        publishCapabilities = publishCapabilities,
         credentials = {
             credentialCalls += 1
             gate?.await()

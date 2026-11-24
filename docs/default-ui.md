@@ -58,3 +58,16 @@ The plain `DeviceStreamView` remains the View API for custom hosts. Navigation, 
 and default overlays are Compose-only. A View host can embed them in `ComposeView` or build its own
 chrome on the headless core.
 
+
+## Microphone and camera pill
+
+With a direct microphone `publishCapabilities` snapshot in the session config, `DeviceStream`
+overlays mic/camera controls at bottom centre, without changing video layout. Camera also requires
+local H.264 support. Live icons use `StreamTheme.tokens.destructive`; starting disables controls.
+Set `showPublishControls = false` to hide them. Use `requestPublishPermissions` for your host runtime
+permission flow before capture. All publish captions/accessibility names use `StreamLabels`,
+including permission-denied and server-refused messages. See [Publishing](publishing.md).
+
+Publish buttons use the host Activity Result registry by default, after device acceptance. The pill's
+background passes taps through to the stream. After three seconds of inactivity it fades to 50%
+opacity; nearby pointer/touch activity restores it. Status text floats above the fixed-height pill.
