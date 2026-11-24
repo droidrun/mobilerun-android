@@ -67,3 +67,7 @@ local H.264 support. Live icons use `StreamTheme.tokens.destructive`; starting d
 Set `showPublishControls = false` to hide them. Use `requestPublishPermissions` for your host runtime
 permission flow before capture. All publish captions/accessibility names use `StreamLabels`,
 including permission-denied and server-refused messages. See [Publishing](publishing.md).
+
+Publish buttons use the host Activity Result registry by default, after device acceptance. The pill's
+background passes taps through to the stream. After three seconds of inactivity it fades to 50%
+opacity; nearby pointer/touch activity restores it. Status text floats above the fixed-height pill.

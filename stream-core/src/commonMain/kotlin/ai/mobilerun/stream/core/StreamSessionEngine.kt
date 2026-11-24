@@ -139,15 +139,20 @@ public class StreamSessionEngine(
     public val publishState: StateFlow<PublishState> get() = publisher.state
 
     /** Returns only once the server reports active and all requested inputs have attached. */
-    public suspend fun startPublish(options: PublishOptions): PublishState {
+    public suspend fun startPublish(options: PublishOptions, beforeCapture: suspend () -> Unit = {}): PublishState {
         var pending: CompletableDeferred<PublishState>? = null
         try {
-            withContext(serial) { pending = publisher.start(options, connection?.publishBinding, closed) }
+            withContext(serial) { pending = publisher.start(options, connection?.publishBinding, closed, beforeCapture) }
             return checkNotNull(pending).await()
         } catch (e: CancellationException) {
             withContext(NonCancellable + serial) { pending?.let(publisher::cancelStart) }
             throw e
         }
+    }
+
+    /** Ends publication when its viewer is removed or replaced, without fabricating a local stop. */
+    public suspend fun disconnectPublish(): Unit = withContext(serial) {
+        publisher.disconnected(connection?.publishBinding)
     }
 
     /** Stops local capture without waiting for the server. */
@@ -212,7 +217,10 @@ public class StreamSessionEngine(
 
     /** Marks the host visible/hidden. Hidden hosts stop sending keep-alives. */
     public fun setVisible(visible: Boolean) {
-        engineScope.launchGuarded { hostVisible = visible }
+        engineScope.launchGuarded {
+            hostVisible = visible
+            if (!visible) publisher.stop()
+        }
     }
 
     /** Foreground/network recovery. A closed or not-yet-started session is never started by wake. */

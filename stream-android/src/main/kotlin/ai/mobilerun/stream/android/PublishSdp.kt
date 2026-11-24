@@ -18,9 +18,18 @@ internal fun validPublishReservations(sdp: String, mids: Map<PublishKind, String
                     val payload = mapping.substringAfter(':').substringBefore(' ')
                     val fmtp = lines.firstOrNull { it.startsWith("a=fmtp:$payload ") }
                         ?.substringAfter(' ')?.split(';')?.map { it.trim().lowercase() }.orEmpty()
-                    "packetization-mode=1" in fmtp && fmtp.any { it in setOf("profile-level-id=42e01f",
-                        "profile-level-id=42c01f", "profile-level-id=4d001f", "profile-level-id=640c1f") }
+                    "packetization-mode=1" in fmtp && fmtp.any { it.startsWith("profile-level-id=") &&
+                        supportsPublishH264(it.substringAfter('=')) }
                 }
         }
     }.keys.toSet()
+}
+
+/** Contract profiles with the platform's original level preserved (minimum level 3.1). */
+internal val PUBLISH_H264_PROFILE_PREFIXES: Set<String> = setOf("42e0", "42c0", "4d00", "640c")
+
+internal fun supportsPublishH264(profileLevelId: String?): Boolean {
+    val value = profileLevelId?.lowercase() ?: return false
+    return value.length == 6 && value.take(4) in PUBLISH_H264_PROFILE_PREFIXES &&
+        (value.takeLast(2).toIntOrNull(16) ?: -1) >= 0x1f
 }

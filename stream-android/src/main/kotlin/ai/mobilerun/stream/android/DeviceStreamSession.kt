@@ -21,6 +21,14 @@ import ai.mobilerun.stream.protocol.InternalStreamApi
 import ai.mobilerun.stream.protocol.SignallingTiming
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -135,6 +143,17 @@ public class DeviceStreamSession internal constructor(
     internal val isClosed: Boolean get() = closed.value || !sessionJob.isActive
 
     init {
+        worker.launch(Dispatchers.Main.immediate) {
+            val lifecycle = ProcessLifecycleOwner.get().lifecycle
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) engine.setVisible(false)
+                if (event == Lifecycle.Event.ON_START) engine.setVisible(true)
+            }
+            lifecycle.addObserver(observer)
+            try { awaitCancellation() } finally {
+                withContext(NonCancellable + Dispatchers.Main.immediate) { lifecycle.removeObserver(observer) }
+            }
+        }
         sessionJob.invokeOnCompletion {
             mutableClosed.value = true
             activePeer = null
@@ -152,6 +171,15 @@ public class DeviceStreamSession internal constructor(
 
     /** Host must obtain RECORD_AUDIO (and CAMERA for video) before calling. Never prompts itself. */
     public suspend fun startPublish(options: PublishOptions): PublishState = engine.startPublish(options)
+
+    /** Runs the host permission flow only after server acceptance, before checking grants/capture. */
+    @InternalStreamApi
+    public suspend fun startPublishWithPermissions(options: PublishOptions, requestPermissions: suspend () -> Unit): PublishState =
+        engine.startPublish(options) { withContext(Dispatchers.Main.immediate) { requestPermissions() } }
+
+    /** Viewer removal/replacement ends publication with a disconnected state and error. */
+    @InternalStreamApi
+    public suspend fun disconnectPublish(): Unit = engine.disconnectPublish()
 
     /** Idempotent local teardown; viewing and downstream mute remain unchanged. */
     public suspend fun stopPublish(): Unit = engine.stopPublish()

@@ -31,7 +31,7 @@ class PublishSessionTest {
         assertEquals("forbidden", errors.single().serverReason)
         assertEquals(0, errors.single().attempt)
         assertTrue(errors.single().final)
-        assertTrue(h.peer.publishCapture.stops > 0)
+        assertEquals(0, h.peer.captureCount)
     }
 
     @Test fun signalingLossStopsCaptureBeforeViewerReconnectAndNeverResumesIt() = runTest {
@@ -84,6 +84,8 @@ class PublishSessionTest {
         val start = async { h.engine.startPublish(PublishOptions(true)) }
         runCurrent()
         val id = h.engine.publishState.value.mediaSessionId
+        h.socket.serverSends("""{"type":"publishState","mediaSessionId":"$id","state":"accepted"}""")
+        runCurrent()
         assertEquals(1, h.peer.captureCount)
         start.cancel()
         runCurrent()
@@ -91,8 +93,46 @@ class PublishSessionTest {
         assertTrue(h.peer.publishCapture.stops > 0)
         h.socket.serverSends("""{"type":"publishState","mediaSessionId":"$id","state":"active"}""")
         runCurrent()
-        assertTrue(h.peer.publishCapture.attached.isEmpty())
+        assertEquals(1, h.peer.publishCapture.attached.size)
         assertEquals("stopped_by_client", h.engine.publishState.value.reason)
+    }
+
+    @Test fun backgroundStopsActiveCaptureWithoutResumingOnForeground() = runTest {
+        val h = Harness(this, publishCapabilities = DevicePublishCapabilities(true, false, "direct"))
+        h.connect()
+        val start = async { h.engine.startPublish(PublishOptions(true)) }
+        runCurrent()
+        h.socket.serverSends("""{"type":"publishState","mediaSessionId":"${h.engine.publishState.value.mediaSessionId}","state":"active"}""")
+        runCurrent()
+        start.await()
+        h.engine.setVisible(false)
+        runCurrent()
+        assertEquals(PublishPhase.Stopped, h.engine.publishState.value.phase)
+        assertTrue(h.peer.publishCapture.stops > 0)
+        h.engine.setVisible(true)
+        runCurrent()
+        assertEquals(1, h.peer.captureCount)
+        assertEquals(1, h.socket.framesOf("publishStart").size)
+    }
+
+
+    @Test fun viewerRemovalEndsPublicationWithOneDisconnectedEvent() = runTest {
+        val h = Harness(this, publishCapabilities = DevicePublishCapabilities(true, false, "direct"))
+        val errors = mutableListOf<StreamError>()
+        backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { h.engine.errors.collect { errors += it } }
+        h.connect()
+        val start = async { h.engine.startPublish(PublishOptions(true)) }
+        runCurrent()
+        h.socket.serverSends("""{"type":"publishState","mediaSessionId":"${h.engine.publishState.value.mediaSessionId}","state":"active"}""")
+        runCurrent()
+        start.await()
+        h.engine.disconnectPublish()
+        h.engine.disconnectPublish()
+        runCurrent()
+        assertEquals(PublishPhase.Error, h.engine.publishState.value.phase)
+        assertEquals("disconnected", h.engine.publishState.value.reason)
+        assertEquals(1, errors.count { it.operation == "publish" && it.reason == StreamErrorReason.Disconnected })
+        assertTrue(h.peer.publishCapture.stops > 0)
     }
 
 }

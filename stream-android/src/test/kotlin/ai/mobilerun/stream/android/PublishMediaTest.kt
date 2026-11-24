@@ -65,4 +65,16 @@ class PublishMediaTest {
         assertEquals(emptySet(), validPublishReservations(offer.replace("a=sendonly", "a=inactive"), mids))
         assertEquals(setOf(PublishKind.Video), validPublishReservations(offer.replace("opus/48000/2", "opus/48000/1"), mids))
     }
+    @Test fun h264ProfileRuleAcceptsAllContractPrefixesAtOrAboveLevel31() {
+        listOf("42e01f", "42e02a", "42c020", "4d0033", "640c34", "42E02A").forEach {
+            assertTrue(supportsPublishH264(it), it)
+        }
+        listOf(null, "42e01e", "42c000", "4d0010", "640c1a", "64001f", "42e0zz", "42e01fff").forEach {
+            assertFalse(supportsPublishH264(it), it)
+        }
+        val mids = mapOf(PublishKind.Video to "2")
+        assertEquals(setOf(PublishKind.Video), validPublishReservations(offer.replace("42e01f", "42e02a"), mids))
+        assertEquals(emptySet(), validPublishReservations(offer.replace("42e01f", "42e01e"), mids))
+    }
+
 }

@@ -27,11 +27,10 @@ public class StreamLabels(
     public val camera: String = "Camera",
     public val stopMicrophone: String = "Stop microphone",
     public val stopCamera: String = "Stop camera",
-    public val publishStarting: String = "Starting capture",
-    public val publishPermissionDenied: String = "Microphone or camera permission required",
+    public val publishStarting: String = "Starting inputs",
+    public val publishPermissionDenied: String = "Microphone or camera permission denied",
     public val publishNotAllowed: String = "Publishing is not allowed",
-    public val publishUnsupported: String = "Publishing is not supported",
-    public val publishFailed: String = "Publishing failed",
+    public val publishFailed: String = "Could not publish inputs",
 
 ) {
     override fun equals(other: Any?): Boolean =
@@ -52,7 +51,6 @@ public class StreamLabels(
             publishStarting == other.publishStarting &&
             publishPermissionDenied == other.publishPermissionDenied &&
             publishNotAllowed == other.publishNotAllowed &&
-            publishUnsupported == other.publishUnsupported &&
             publishFailed == other.publishFailed
 
     override fun hashCode(): Int {
@@ -72,7 +70,6 @@ public class StreamLabels(
         result = 31 * result + publishStarting.hashCode()
         result = 31 * result + publishPermissionDenied.hashCode()
         result = 31 * result + publishNotAllowed.hashCode()
-        result = 31 * result + publishUnsupported.hashCode()
         result = 31 * result + publishFailed.hashCode()
         return result
     }
@@ -100,12 +97,11 @@ public class StreamLabels(
         publishStarting: String = this.publishStarting,
         publishPermissionDenied: String = this.publishPermissionDenied,
         publishNotAllowed: String = this.publishNotAllowed,
-        publishUnsupported: String = this.publishUnsupported,
         publishFailed: String = this.publishFailed,
 
     ): StreamLabels = StreamLabels(
         connecting, reconnecting, reconnectingAttempt, unavailable, retry, back, home, recent, disconnected,
-        microphone, camera, stopMicrophone, stopCamera, publishStarting, publishPermissionDenied, publishNotAllowed, publishUnsupported, publishFailed,
+        microphone, camera, stopMicrophone, stopCamera, publishStarting, publishPermissionDenied, publishNotAllowed, publishFailed,
     )
 }
 

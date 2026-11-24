@@ -39,6 +39,7 @@ dependencies {
     api(project(":stream-android"))
     api(libs.compose.ui)
     api(libs.compose.foundation)
+    implementation(libs.androidx.activity)
     debugImplementation(libs.compose.ui.test.manifest)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.robolectric)

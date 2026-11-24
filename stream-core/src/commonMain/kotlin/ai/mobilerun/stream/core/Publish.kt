@@ -65,6 +65,6 @@ public interface PublishCapture {
 public interface PublishPeerTransport {
     /** Supported trackless first-offer reservations, verified against generated SDP. */
     public val publishKinds: Set<PublishKind>
-    /** Capture exact inputs, checking permissions first. On failure release partial resources. */
+    /** After server acceptance: capture exact inputs, checking grants first; release partial resources on failure. */
     public suspend fun capture(options: PublishOptions, onEnded: () -> Unit): PublishCapture
 }

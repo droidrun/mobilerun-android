@@ -7,6 +7,8 @@ import ai.mobilerun.stream.protocol.ClientMessage
 import ai.mobilerun.stream.protocol.ServerMessage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,18 +37,19 @@ internal class PublishController(
     // Attachment and late detach of one capture must finish before the next capture attaches.
     private val senderMutex = Mutex()
 
-    private class Operation(val binding: PublishBinding, val options: PublishOptions) {
+    private class Operation(val binding: PublishBinding, val options: PublishOptions, val beforeCapture: suspend () -> Unit) {
         val result = CompletableDeferred<PublishState>()
         val kinds = if (options.video) listOf(PublishKind.Audio, PublishKind.Video) else listOf(PublishKind.Audio)
         var id: String? = null
         var capture: PublishCapture? = null
         var deadline: Job? = null
+        var permissions: Deferred<Unit>? = null
         var accepted = false
         var active = false
         var attached = false
     }
 
-    fun start(options: PublishOptions, binding: PublishBinding?, closed: Boolean): CompletableDeferred<PublishState> {
+    fun start(options: PublishOptions, binding: PublishBinding?, closed: Boolean, beforeCapture: suspend () -> Unit = {}): CompletableDeferred<PublishState> {
         if (closed) return CompletableDeferred<PublishState>().also {
             it.completeExceptionally(PublishException(failure(StreamErrorReason.Disconnected, "session_closed")))
         }
@@ -65,13 +68,28 @@ internal class PublishController(
         if (peer == null || !peer.publishKinds.containsAll(requested)) {
             return rejected(StreamErrorReason.PublishUnsupported, "local_media_support")
         }
-        val op = Operation(binding, options)
+        val op = Operation(binding, options, beforeCapture)
         operation = op
-        snapshot(op, PublishPhase.Capturing)
+        op.id = newId()
+        snapshot(op, PublishPhase.Starting)
+        arm(op, 5_000, StreamErrorReason.PublishUnsupported, "response_timeout")
+        val sent = runCatching { binding.send(ClientMessage.PublishStart(op.id!!, op.kinds.map { it.wireValue })) }
+            .getOrDefault(false)
+        if (!sent) fail(op, failure(StreamErrorReason.Disconnected, "not_connected"))
+        return op.result
+    }
+
+    private fun capture(op: Operation) {
         scope.launch {
-            // Capture may be non-cancellable. Keep the generation check and release late inputs.
+            if (operation !== op) return@launch
+            snapshot(op, PublishPhase.Capturing)
             val capture = try {
-                peer.capture(options) { scope.launch {
+                val permissions = scope.async { op.beforeCapture() }
+                op.permissions = permissions
+                permissions.await()
+                op.permissions = null
+                if (operation !== op) return@launch
+                checkNotNull(op.binding.peer).capture(op.options) { scope.launch {
                     if (operation === op) fail(op, failure(StreamErrorReason.PublishFailed, "capture_unavailable"))
                 } }
             } catch (e: Exception) {
@@ -84,18 +102,12 @@ internal class PublishController(
                 return@launch
             }
             op.capture = capture
-            if (!binding.connected()) {
+            if (!op.binding.connected()) {
                 fail(op, failure(StreamErrorReason.Disconnected, "not_connected"))
                 return@launch
             }
-            op.id = newId()
-            snapshot(op, PublishPhase.Starting)
-            arm(op, 5_000, StreamErrorReason.PublishUnsupported, "response_timeout")
-            val sent = runCatching { binding.send(ClientMessage.PublishStart(op.id!!, op.kinds.map { it.wireValue })) }
-                .getOrDefault(false)
-            if (!sent) fail(op, failure(StreamErrorReason.Disconnected, "not_connected"))
+            attach(op)
         }
-        return op.result
     }
 
     fun receive(binding: PublishBinding?, message: ServerMessage.PublishState) {
@@ -105,13 +117,12 @@ internal class PublishController(
             "accepted", "active" -> {
                 if (message.state == "active") {
                     op.active = true
-                    op.deadline?.cancel()
                 }
                 if (!op.accepted) {
                     op.accepted = true
                     snapshot(op, PublishPhase.Accepted)
-                    if (!op.active) arm(op, 15_000, StreamErrorReason.PublishTimeout, "active_timeout")
-                    attach(op)
+                    arm(op, 30_000, StreamErrorReason.PublishTimeout, "active_timeout")
+                    capture(op)
                 }
                 completeIfActive(op)
             }
@@ -158,6 +169,7 @@ internal class PublishController(
 
     private fun completeIfActive(op: Operation) {
         if (operation !== op || !op.active || !op.attached || op.result.isCompleted) return
+        op.deadline?.cancel()
         snapshot(op, PublishPhase.Active)
         op.result.complete(state.value)
     }
@@ -165,9 +177,16 @@ internal class PublishController(
     /** Synchronous local teardown never waits on acknowledgement or on a suspended attachment. */
     fun stop() {
         val op = operation ?: return
-        teardown(op)
-        snapshot(op, PublishPhase.Stopped, reason = "stopped_by_client")
-        op.result.completeExceptionally(PublishException(failure(StreamErrorReason.PublishCancelled)))
+        val stopFailed = teardown(op)
+        if (stopFailed) {
+            val failure = failure(StreamErrorReason.Disconnected)
+            snapshot(op, PublishPhase.Error, failure)
+            onError(failure, op.id)
+            op.result.completeExceptionally(PublishException(failure))
+        } else {
+            snapshot(op, PublishPhase.Stopped, reason = "stopped_by_client")
+            op.result.completeExceptionally(PublishException(failure(StreamErrorReason.PublishCancelled)))
+        }
     }
 
     fun cancelStart(result: CompletableDeferred<PublishState>) {
@@ -181,20 +200,21 @@ internal class PublishController(
 
     private fun fail(op: Operation, failure: PublishFailure) {
         if (operation !== op) return
-        teardown(op)
-        snapshot(op, PublishPhase.Error, failure)
-        onError(failure, op.id)
-        op.result.completeExceptionally(PublishException(failure))
+        val normalized = if (teardown(op)) this.failure(StreamErrorReason.Disconnected) else failure
+        snapshot(op, PublishPhase.Error, normalized)
+        onError(normalized, op.id)
+        op.result.completeExceptionally(PublishException(normalized))
     }
 
-    private fun teardown(op: Operation) {
+    private fun teardown(op: Operation): Boolean {
         operation = null
         op.deadline?.cancel()
+        op.permissions?.cancel()
         op.capture?.let { capture ->
             runCatching { capture.stop() }
             runCatching { capture.detach() }
         }
-        op.id?.let { id -> runCatching { op.binding.send(ClientMessage.StopPublish(id)) } }
+        return op.id?.let { id -> runCatching { op.binding.send(ClientMessage.StopPublish(id)) }.isFailure } ?: false
     }
 
     private fun arm(op: Operation, ms: Long, reason: StreamErrorReason, detail: String) {

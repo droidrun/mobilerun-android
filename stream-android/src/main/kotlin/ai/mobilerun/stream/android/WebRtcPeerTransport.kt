@@ -114,7 +114,7 @@ internal class WebRtcPeerTransport(
             if (publishCapabilities?.supportsMicrophone == true) {
                 val videoCodecs = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
                     .filter { it.mimeType.equals("video/H264", true) && it.parameters["packetization-mode"] == "1" &&
-                        it.parameters["profile-level-id"]?.lowercase() in setOf("42e01f", "42c01f", "4d001f", "640c1f") }
+                        supportsPublishH264(it.parameters["profile-level-id"]) }
                     .sortedBy { if (it.parameters["profile-level-id"]?.startsWith("42") == true) 0 else 1 }
                 if (publishCapabilities.cameraInjection && videoCodecs.isNotEmpty()) {
                     upstream[PublishKind.Video] = peerConnection.addTransceiver(

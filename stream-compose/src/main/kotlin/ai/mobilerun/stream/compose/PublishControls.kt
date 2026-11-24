@@ -22,6 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -30,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 internal fun showPublishPill(capabilities: DevicePublishCapabilities?, show: Boolean): Boolean =
     show && capabilities?.supportsMicrophone == true
@@ -37,15 +41,17 @@ internal fun showPublishPill(capabilities: DevicePublishCapabilities?, show: Boo
 @Composable
 internal fun SessionPublishControls(session: DeviceStreamSession, status: StreamStatus, closed: Boolean,
     show: Boolean, labels: StreamLabels, modifier: Modifier,
-    requestPermissions: suspend (PublishOptions) -> Unit,
+    requestPermissions: (suspend (PublishOptions) -> Unit)?,
+    interaction: Long,
 ) {
     val state by session.publishState.collectAsState()
     val scope = rememberCoroutineScope()
+    val defaultPermissions = rememberPublishPermissions()
     var requesting by remember(session) { mutableStateOf(false) }
-    if (!showPublishPill(session.publishCapabilities, show)) return
+    if (!showPublishPill(session.publishCapabilities, show) || state.reason == "publish_unsupported") return
     PublishPill(state, status == StreamStatus.Connected && !closed && !requesting,
         session.publishCapabilities?.cameraInjection == true && session.cameraPublishSupported,
-        labels, modifier, onToggle = toggle@ { video ->
+        labels, modifier, interaction = interaction, onToggle = toggle@ { video ->
             if (requesting) return@toggle
             requesting = true
             scope.launch {
@@ -55,8 +61,9 @@ internal fun SessionPublishControls(session: DeviceStreamSession, status: Stream
                     if (active) session.stopPublish()
                     if (!active || video) {
                         val options = PublishOptions(audio = true, video = video && (!active || !hadCamera))
-                        requestPermissions(options)
-                        session.startPublish(options)
+                        session.startPublishWithPermissions(options) {
+                            (requestPermissions ?: defaultPermissions)(options)
+                        }
                     }
                 } catch (_: PublishException) {
                     // The shared state/error flow contains the structured failure; render its label.
@@ -67,8 +74,15 @@ internal fun SessionPublishControls(session: DeviceStreamSession, status: Stream
 
 @Composable
 internal fun PublishPill(state: PublishState, connected: Boolean, cameraSupported: Boolean,
-    labels: StreamLabels, modifier: Modifier = Modifier, onToggle: (Boolean) -> Unit) {
+    labels: StreamLabels, modifier: Modifier = Modifier, interaction: Long = 0, onToggle: (Boolean) -> Unit) {
     val t = StreamTheme.tokens
+    var faded by remember { mutableStateOf(false) }
+    var buttonInteraction by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(interaction, buttonInteraction) {
+        faded = false
+        delay(3_000)
+        faded = true
+    }
     val pending = state.phase in setOf(PublishPhase.Capturing, PublishPhase.Starting, PublishPhase.Accepted)
     val active = state.phase == PublishPhase.Active
     val camera = active && PublishKind.Video in state.kinds
@@ -77,19 +91,20 @@ internal fun PublishPill(state: PublishState, connected: Boolean, cameraSupporte
         state.phase != PublishPhase.Error -> ""
         state.reason == "permission_denied" -> labels.publishPermissionDenied
         state.reason == "publish_not_allowed" -> labels.publishNotAllowed
-        state.reason == "publish_unsupported" -> labels.publishUnsupported
         else -> labels.publishFailed
     }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (label.isNotEmpty()) BasicText(label, Modifier.padding(bottom = 6.dp),
+    // The label is an overlay anchored above the fixed-height pill, never a layout sibling.
+    Box(modifier.height(48.dp).alpha(if (faded) .5f else 1f)) {
+        if (label.isNotEmpty()) BasicText(label, Modifier.align(Alignment.BottomCenter)
+            .wrapContentWidth(unbounded = true).offset(y = (-54).dp),
             style = t.typography.caption.copy(color = t.destructive))
         Row(Modifier.clip(RoundedCornerShape(50)).background(t.card.copy(alpha = .94f))
             .border(1.dp, t.border, RoundedCornerShape(50)).padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically) {
             PublishToggle(false, active, connected && !pending,
-                if (active) labels.stopMicrophone else labels.microphone) { onToggle(false) }
+                if (active) labels.stopMicrophone else labels.microphone) { buttonInteraction++; onToggle(false) }
             if (cameraSupported) PublishToggle(true, camera, connected && !pending,
-                if (camera) labels.stopCamera else labels.camera) { onToggle(true) }
+                if (camera) labels.stopCamera else labels.camera) { buttonInteraction++; onToggle(true) }
         }
     }
 }
@@ -118,4 +133,21 @@ private fun PublishToggle(camera: Boolean, live: Boolean, enabled: Boolean, labe
             }
         }
     }
+}
+
+/** Observe the shared stream ancestor without consuming input or adding a pill hit target. */
+@Composable
+internal fun Modifier.observePublishProximity(onNear: () -> Unit): Modifier {
+    val currentOnNear by rememberUpdatedState(onNear)
+    return pointerInput(Unit) {
+    val nearWidth = 120.dp.toPx()
+    val nearHeight = 120.dp.toPx()
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.changes.any { kotlin.math.abs(it.position.x - size.width / 2f) <= nearWidth &&
+                    it.position.y >= size.height - nearHeight }) currentOnNear()
+        }
+    }
+}
 }

@@ -45,6 +45,9 @@ private class PublishHarness(scope: TestScope,
     var captureError: Exception? = null
     var supported = setOf(PublishKind.Audio, PublishKind.Video)
     var connected = true
+    var sendErrorFor: String? = null
+    var permissionCalls = 0
+    var permissionGate: CompletableDeferred<Unit>? = null
     var ended: (() -> Unit)? = null
     val outgoing = mutableListOf<ClientMessage>()
     val errors = mutableListOf<PublishFailure>()
@@ -60,9 +63,17 @@ private class PublishHarness(scope: TestScope,
             captureError?.let { throw it }
             return capture
         }
-    }, { connected }, { outgoing += it; true })
+    }, { connected }, {
+        if ((it is ClientMessage.PublishStart && sendErrorFor == "start") ||
+            (it is ClientMessage.StopPublish && sendErrorFor == "stop")) error("socket write failed")
+        outgoing += it
+        true
+    })
     val state get() = controller.state.value
-    fun start(video: Boolean = false) = controller.start(PublishOptions(true, video), binding, false)
+    fun start(video: Boolean = false) = controller.start(PublishOptions(true, video), binding, false) {
+        permissionCalls++
+        permissionGate?.await()
+    }
     fun frame(json: String) {
         val parsed = ServerMessage.parse(json, SignallingPhase.Established)
         if (parsed is ServerFrame.Message && parsed.message is ServerMessage.PublishState) {
@@ -106,14 +117,14 @@ class PublishControllerTest {
         runCurrent()
         h.server("active")
         runCurrent()
-        assertEquals(PublishPhase.Accepted, h.state.phase)
+        assertEquals(PublishPhase.Capturing, h.state.phase)
         assertFalse(start.isCompleted)
         h.capture.attachGate!!.complete(Unit)
         runCurrent()
         assertEquals(PublishPhase.Active, start.await().phase)
     }
 
-    @Test fun forbiddenPreservesViewerAndStopsCaptureWithoutAttachment() = runTest {
+    @Test fun forbiddenPreservesViewerWithoutPermissionOrCapture() = runTest {
         val h = PublishHarness(this)
         val start = h.start()
         runCurrent()
@@ -124,8 +135,8 @@ class PublishControllerTest {
         assertEquals("forbidden", h.state.serverReason)
         assertTrue(h.connected)
         assertEquals(emptyList(), h.capture.attached)
-        assertTrue(h.capture.stops > 0)
-        assertTrue(h.capture.detaches > 0)
+        assertEquals(0, h.captureCount)
+        assertEquals(0, h.permissionCalls)
         h.server("rejected", "forbidden")
         assertEquals(1, h.errors.size)
         assertEquals(1, h.outgoing.filterIsInstance<ClientMessage.StopPublish>().size)
@@ -142,7 +153,8 @@ class PublishControllerTest {
         runCurrent()
         assertEquals(StreamErrorReason.PublishUnsupported, assertFailsWith<PublishException> { start.await() }.failure.reason)
         assertEquals("response_timeout", h.state.detail)
-        assertTrue(h.capture.stops > 0)
+        assertEquals(0, h.captureCount)
+        assertEquals(0, h.permissionCalls)
         assertEquals(emptyList(), h.capture.attached)
     }
 
@@ -152,7 +164,7 @@ class PublishControllerTest {
         runCurrent()
         h.server("accepted")
         runCurrent()
-        advanceTimeBy(14_999)
+        advanceTimeBy(29_999)
         h.server("accepted")
         assertFalse(start.isCompleted)
         advanceTimeBy(1)
@@ -172,7 +184,7 @@ class PublishControllerTest {
             h.server("error", wire)
             assertEquals(expected, assertFailsWith<PublishException> { start.await() }.failure.reason)
             assertEquals(wire, h.state.serverReason)
-            assertTrue(h.capture.stops > 0)
+            assertEquals(0, h.captureCount)
         }
     }
 
@@ -181,15 +193,21 @@ class PublishControllerTest {
         h.captureError = PublishException(PublishFailure(StreamErrorReason.PermissionDenied, "permission", "capture_permission"))
         val start = h.start()
         runCurrent()
+        assertEquals(0, h.permissionCalls)
+        h.server("accepted")
+        runCurrent()
         assertEquals(StreamErrorReason.PermissionDenied, assertFailsWith<PublishException> { start.await() }.failure.reason)
         assertEquals("capture_permission", h.state.detail)
-        assertTrue(h.outgoing.isEmpty())
+        assertEquals(1, h.outgoing.filterIsInstance<ClientMessage.StopPublish>().size)
     }
 
-    @Test fun stopDuringCaptureReleasesLateInputWithoutSignaling() = runTest {
+    @Test fun stopDuringCaptureReleasesLateInputAndSignalsStop() = runTest {
         val h = PublishHarness(this)
         h.captureGate = CompletableDeferred()
         val start = h.start()
+        runCurrent()
+        assertEquals(0, h.permissionCalls)
+        h.server("accepted")
         runCurrent()
         h.controller.stop()
         assertEquals(StreamErrorReason.PublishCancelled, assertFailsWith<PublishException> { start.await() }.failure.reason)
@@ -197,7 +215,7 @@ class PublishControllerTest {
         h.captureGate!!.complete(Unit)
         runCurrent()
         assertTrue(h.capture.stops > 0)
-        assertTrue(h.outgoing.isEmpty())
+        assertEquals(1, h.outgoing.filterIsInstance<ClientMessage.StopPublish>().size)
         assertTrue(h.errors.isEmpty())
     }
 
@@ -345,6 +363,72 @@ class PublishControllerTest {
         assertEquals(PublishPhase.Starting, h.state.phase)
         h.controller.stop()
         assertFailsWith<PublishException> { second.await() }
+    }
+
+    @Test fun permissionPromptStartsOnlyAfterAcceptanceAndHasThirtySeconds() = runTest {
+        val h = PublishHarness(this)
+        h.permissionGate = CompletableDeferred()
+        val start = h.start(true)
+        runCurrent()
+        assertEquals(0, h.permissionCalls)
+        assertEquals(0, h.captureCount)
+        advanceTimeBy(4_999)
+        h.server("accepted")
+        runCurrent()
+        assertEquals(1, h.permissionCalls)
+        assertEquals(0, h.captureCount)
+        advanceTimeBy(29_999)
+        runCurrent()
+        assertFalse(start.isCompleted)
+        h.permissionGate!!.complete(Unit)
+        h.server("active")
+        runCurrent()
+        assertEquals(PublishPhase.Active, start.await().phase)
+        assertEquals(1, h.captureCount)
+    }
+
+    @Test fun timeoutDuringPermissionPromptSendsStopAndPreventsLateCapture() = runTest {
+        val h = PublishHarness(this)
+        h.permissionGate = CompletableDeferred()
+        val start = h.start()
+        h.server("accepted")
+        runCurrent()
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(StreamErrorReason.PublishTimeout, assertFailsWith<PublishException> { start.await() }.failure.reason)
+        assertEquals(1, h.outgoing.filterIsInstance<ClientMessage.StopPublish>().size)
+        h.permissionGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(0, h.captureCount)
+        assertEquals(PublishPhase.Error, h.state.phase)
+    }
+
+    @Test fun throwingStartSendReportsDisconnectedWithoutPermissionOrCapture() = runTest {
+        val h = PublishHarness(this)
+        h.sendErrorFor = "start"
+        val start = h.start()
+        runCurrent()
+        assertEquals(StreamErrorReason.Disconnected, assertFailsWith<PublishException> { start.await() }.failure.reason)
+        assertEquals("disconnected", h.state.reason)
+        assertEquals(1, h.errors.size)
+        assertEquals(0, h.captureCount)
+        assertEquals(0, h.permissionCalls)
+    }
+
+    @Test fun throwingStopSendReportsDisconnectedAndReleasesActiveCaptureOnce() = runTest {
+        val h = PublishHarness(this)
+        val start = h.start()
+        h.server("active")
+        runCurrent()
+        start.await()
+        h.sendErrorFor = "stop"
+        h.controller.stop()
+        assertEquals("disconnected", h.state.reason)
+        assertTrue(h.capture.stops > 0)
+        assertTrue(h.capture.detaches > 0)
+        assertEquals(1, h.errors.size)
+        h.controller.stop()
+        assertEquals(1, h.errors.size)
     }
 
 }
